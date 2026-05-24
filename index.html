@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>CME GEO Impact Model</title>
+<style>
+body{margin:0;background:#080a0f;color:#eee;font-family:system-ui,sans-serif}
+header{padding:16px;background:#121722;border-bottom:1px solid #333}
+button{padding:10px 14px;margin:4px;border:0;border-radius:8px;font-weight:700;cursor:pointer}
+main{padding:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(390px,1fr));gap:16px}
+.card{background:#151a24;border:1px solid #333;border-radius:14px;padding:14px}
+.box{position:relative;width:100%;aspect-ratio:1/1;background:#000;border-radius:12px;overflow:hidden}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+pre{background:#050608;border-radius:10px;padding:10px;white-space:pre-wrap;max-height:320px;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{border-bottom:1px solid #333;padding:6px;text-align:left}
+.ok{color:#8bc34a}.warn{color:#ffd54f}.mid{color:#ff9800}.bad{color:#ff5252}
+.small{font-size:13px;color:#bbb;line-height:1.5}
+</style>
+</head>
+<body>
+
+<header>
+<h2>CME → GEO Longitude Impact Model</h2>
+<button onclick="loadAll()">CACTus + NOAA 太陽風を取得</button>
+</header>
+
+<main>
+<div class="grid">
+<section class="card">
+<h3>① CME方向モデル</h3>
+<div class="box"><canvas id="cmeCanvas"></canvas></div>
+<div id="cmeSummary" class="small"></div>
+</section>
+
+<section class="card">
+<h3>② GEO経度リスク</h3>
+<div class="box"><canvas id="geoCanvas"></canvas></div>
+<div id="geoSummary" class="small"></div>
+</section>
+</div>
+
+<section class="card" style="margin-top:16px">
+<h3>CME Ranking</h3>
+<div id="table"></div>
+</section>
+
+<section class="card" style="margin-top:16px">
+<h3>Raw / Status</h3>
+<pre id="raw">未取得</pre>
+</section>
+</main>
+
+<script>
+const CACTUS_URL =
+"https://www.sidc.be/cactus/catalog/LASCO/2_5_0/qkl/2026/05/latestCMEs.html";
+
+const NOAA = {
+  plasma:"https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json",
+  mag:"https://services.swpc.noaa.gov/products/solar-wind/mag-1-day.json",
+  kp:"https://services.swpc.noaa.gov/products/noaa-estimated-planetary-k-index-1-minute.json"
+};
+
+async function fetchTextWithFallback(url){
+  try{
+    const r = await fetch(url + "?t=" + Date.now());
+    if(!r.ok) throw new Error(r.status);
+    return await r.text();
+  }catch(e){
+    const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
+    const r = await fetch(proxy);
+    if(!r.ok) throw new Error("CACTus取得失敗。CORSの可能性あり。");
+    return await r.text();
+  }
+}
+
+async function fetchJson(url){
+  const r = await fetch(url + "?t=" + Date.now());
+  if(!r.ok) throw new Error(url);
+  return await r.json();
+}
+
+async function loadAll(){
+  try{
+    raw("取得中...");
+    const [html, plasma, mag, kp] = await Promise.all([
+      fetchTextWithFallback(CACTUS_URL),
+      fetchJson(NOAA.plasma).catch(()=>[]),
+      fetchJson(NOAA.mag).catch(()=>[]),
+      fetchJson(NOAA.kp).catch(()=>[])
+    ]);
+
+    const cmes = parseCactus(html);
+    const sw = parseSolarWind(plasma, mag, kp);
+    const modeled = cmes.map(c => modelCME(c, sw)).sort((a,b)=>b.impactScore-a.impactScore);
+
+    drawCME(modeled);
+    drawGEO(modeled, sw);
+    renderTable(modeled);
+    renderSummary(modeled, sw);
+
+    raw(JSON.stringify({solarWind:sw, cmes:modeled.slice(0,10)}, null, 2));
+  }catch(e){
+    raw("ERROR: " + e.message);
+  }
+}
+
+function raw(t){document.getElementById("raw").textContent=t;}
+
+function parseCactus(html){
+  const text = html.replace(/<[^>]+>/g," ");
+  const lines = text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  const cmes = [];
+
+  for(const line of lines){
+    const m = line.match(
+      /^(\d+)\s*\|\s*([\d\/]+\s+\d{2}:\d{2})\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([IVX-]*)/
+    );
+    if(!m) continue;
+
+    cmes.push({
+      id:m[1],
+      t0:m[2],
+      dt0:+m[3],
+      pa:+m[4],
+      da:+m[5],
+      v:+m[6],
+      dv:+m[7],
+      minv:+m[8],
+      maxv:+m[9],
+      halo:m[10] || ""
+    });
+  }
+  return cmes;
+}
+
+function parseSolarWind(plasma, mag, kp){
+  const p = latestDataRow(plasma);
+  const b = latestDataRow(mag);
+  const k = latestDataRow(kp);
+
+  const speed = +(p?.[2] || p?.speed || 0);
+  const density = +(p?.[1] || p?.density || 0);
+  const temp = +(p?.[3] || 0);
+
+  const bt = +(b?.[6] || b?.bt || 0);
+  const bz = +(b?.[3] || b?.bz_gsm || b?.bz || 0);
+  const by = +(b?.[2] || 0);
+
+  const kpVal = +(k?.[1] || k?.kp || 0);
+  const pdyn = density && speed ? 1.6726e-6 * density * speed * speed : 0;
+
+  return {
+    speed,density,temp,bt,by,bz,kp:kpVal,
+    dynamicPressure:pdyn,
+    time:p?.[0] || b?.[0] || k?.[0] || ""
+  };
+}
+
+function latestDataRow(arr){
+  if(!Array.isArray(arr) || arr.length===0) return null;
+  for(let i=arr.length-1;i>=0;i--){
+    if(Array.isArray(arr[i]) && !String(arr[i][0]).toLowerCase().includes("time")) return arr[i];
+    if(typeof arr[i]==="object") return arr[i];
+  }
+  return null;
+}
+
+function modelCME(c, sw){
+  const haloScore =
+    c.halo==="IV" ? 45 :
+    c.halo==="III" ? 35 :
+    c.halo==="II" ? 22 :
+    c.da>=90 ? 18 : 0;
+
+  const widthScore = Math.min(30, c.da/4);
+  const speedScore = c.v>=1500 ? 35 : c.v>=1000 ? 28 : c.v>=700 ? 18 : c.v>=500 ? 10 : 3;
+
+  const earthwardScore = earthwardFromPA(c.pa, c.da);
+  const shockBoost = sw.dynamicPressure>=8 ? 15 : sw.dynamicPressure>=4 ? 8 : 0;
+  const bzBoost = sw.bz<=-10 ? 18 : sw.bz<=-5 ? 10 : 0;
+  const kpBoost = sw.kp>=6 ? 15 : sw.kp>=5 ? 9 : 0;
+
+  const impactScore = Math.min(100, Math.round(
+    haloScore + widthScore + speedScore + earthwardScore + shockBoost + bzBoost + kpBoost
+  ));
+
+  const arrival = estimateArrival(c);
+  return {...c, impactScore, arrival};
+}
+
+function earthwardFromPA(pa, da){
+  // CACTus PAだけでは地球方向判定は弱い。
+  // halo/幅広CMEを重視し、limb単独は低め。
+  if(da>=270) return 35;
+  if(da>=180) return 28;
+  if(da>=90) return 15;
+
+  const eastWestLimb = Math.min(Math.abs(pa-90), Math.abs(pa-270));
+  if(eastWestLimb<35) return 5;
+  return 10;
+}
+
+function estimateArrival(c){
+  const auKm = 149597870;
+  let vEff = c.v;
+
+  // 簡易drag補正：速いCMEは太陽風速度側へ減速
+  if(c.v>450) vEff = 450 + (c.v-450)*0.62;
+  if(c.v<350) vEff = 350;
+
+  const hours = auKm / vEff / 3600;
+  const t = parseCactusTime(c.t0);
+  const arr = new Date(t.getTime() + hours*3600*1000);
+
+  return {
+    hours:Math.round(hours),
+    utc:arr.toISOString(),
+    subsolarLon:subsolarLongitude(arr)
+  };
+}
+
+function parseCactusTime(s){
+  // 2026/05/19 14:12
+  const m=s.match(/(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/);
+  if(!m) return new Date();
+  return new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5]));
+}
+
+function subsolarLongitude(date){
+  const h = date.getUTCHours() + date.getUTCMinutes()/60;
+  let lon = 180 - h*15;
+  while(lon>180) lon-=360;
+  while(lon<-180) lon+=360;
+  return lon;
+}
+
+function setup(id){
+  const c=document.getElementById(id), dpr=devicePixelRatio||1, rct=c.getBoundingClientRect();
+  c.width=rct.width*dpr; c.height=rct.height*dpr;
+  const ctx=c.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,w:rct.width,h:rct.height,cx:rct.width/2,cy:rct.height/2,r:Math.min(rct.width,rct.height)*.38};
+}
+
+function drawCME(cmes){
+  const {ctx,w,h,cx,cy,r}=setup("cmeCanvas");
+  ctx.clearRect(0,0,w,h);
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fillStyle="#ffb300";ctx.fill();
+  ctx.strokeStyle="#fff5";ctx.stroke();
+
+  cmes.slice(0,12).forEach(c=>{
+    const a = (c.pa-90)*Math.PI/180;
+    const half = c.da*Math.PI/360;
+    const col = riskColor(c.impactScore);
+
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,r*1.2,a-half,a+half);
+    ctx.closePath();
+    ctx.fillStyle=col+"44";
+    ctx.fill();
+
+    const x=cx+Math.cos(a)*r*.85, y=cy+Math.sin(a)*r*.85;
+    ctx.fillStyle=col;
+    ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="#fff";ctx.font="11px system-ui";
+    ctx.fillText("CME"+c.id,x+8,y);
+  });
+
+  ctx.fillStyle="#fff";ctx.font="13px system-ui";
+  ctx.fillText("PA/DA cone from CACTus",12,22);
+}
+
+function drawGEO(cmes, sw){
+  const {ctx,w,h}=setup("geoCanvas");
+  ctx.clearRect(0,0,w,h);
+
+  const best = cmes[0];
+  if(!best) return;
+
+  const center = best.arrival.subsolarLon;
+
+  for(let i=0;i<360;i++){
+    const lon=-180+i;
+    const dist=angDist(lon, center);
+
+    let risk = best.impactScore * Math.exp(-(dist*dist)/(2*55*55));
+
+    // 南向きBzが強いと夜側・夕方側リスクも上げる
+    const nightside = angDist(lon, center+180);
+    if(sw.bz < -5) risk += 18*Math.exp(-(nightside*nightside)/(2*75*75));
+
+    const col=riskColor(Math.min(100,risk));
+    ctx.fillStyle=col;
+    ctx.fillRect(i*w/360, h*.25, w/360+1, h*.25);
+  }
+
+  ctx.fillStyle="#fff";ctx.font="13px system-ui";
+  ctx.fillText("GEO Longitude Risk  -180° to +180°",12,24);
+  ctx.fillText("Best CME arrival: "+best.arrival.utc,12,h*.6);
+  ctx.fillText("Subsolar GEO center: "+center.toFixed(1)+"°",12,h*.66);
+  ctx.fillText("Solar wind: V="+sw.speed+" km/s  Bz="+sw.bz+" nT  Pdyn="+sw.dynamicPressure.toFixed(2)+" nPa",12,h*.72);
+
+  [-180,-120,-60,0,60,120,180].forEach(lon=>{
+    const x=(lon+180)/360*w;
+    ctx.strokeStyle="#fff5";ctx.beginPath();ctx.moveTo(x,h*.2);ctx.lineTo(x,h*.55);ctx.stroke();
+    ctx.fillText(lon+"°",x+2,h*.2);
+  });
+}
+
+function angDist(a,b){
+  let d=Math.abs(((a-b+180)%360+360)%360-180);
+  return d;
+}
+
+function riskColor(s){
+  if(s>=75)return"#ff1744";
+  if(s>=55)return"#ff9100";
+  if(s>=30)return"#ffee58";
+  return"#8bc34a";
+}
+
+function renderTable(cmes){
+  document.getElementById("table").innerHTML=`
+  <table>
+  <tr><th>CME</th><th>t0</th><th>PA</th><th>幅</th><th>速度</th><th>Halo</th><th>Impact</th><th>到達予想</th><th>昼側GEO</th></tr>
+  ${cmes.map(c=>`
+    <tr>
+      <td>${c.id}</td><td>${c.t0}</td><td>${c.pa}</td><td>${c.da}</td>
+      <td>${c.v}</td><td>${c.halo||"-"}</td>
+      <td style="color:${riskColor(c.impactScore)};font-weight:700">${c.impactScore}</td>
+      <td>${c.arrival.utc.slice(0,16).replace("T"," ")}</td>
+      <td>${c.arrival.subsolarLon.toFixed(1)}°</td>
+    </tr>`).join("")}
+  </table>`;
+}
+
+function renderSummary(cmes, sw){
+  const best=cmes[0];
+  document.getElementById("cmeSummary").innerHTML =
+    `CACTus CME数: <b>${cmes.length}</b><br>`+
+    `最重要CME: <b>CME${best?.id||"?"}</b> / Impact ${best?.impactScore??"?"}<br>`+
+    `色: 緑=低、黄=注意、橙=中、赤=高`;
+
+  document.getElementById("geoSummary").innerHTML =
+    `NOAA Solar Wind: V=${sw.speed} km/s, density=${sw.density}, Bz=${sw.bz} nT, Kp=${sw.kp}<br>`+
+    `動圧 Pdyn=${sw.dynamicPressure.toFixed(2)} nPa<br>`+
+    `GEOリスクは「CME到達予想時刻の昼側経度」を中心に計算。`;
+}
+
+loadAll();
+</script>
+</body>
+</html>
