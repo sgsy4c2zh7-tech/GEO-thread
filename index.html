@@ -2,7 +2,8 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>CME 7-Day GEO Impact Timeline</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CME GEO Impact Timeline</title>
 <style>
 body{margin:0;background:#080a0f;color:#eee;font-family:system-ui,sans-serif}
 header{padding:16px;background:#121722;border-bottom:1px solid #333}
@@ -17,59 +18,66 @@ pre{background:#050608;border-radius:10px;padding:10px;white-space:pre-wrap;max-
 table{width:100%;border-collapse:collapse;font-size:13px}
 td,th{border-bottom:1px solid #333;padding:6px;text-align:left}
 .small{font-size:13px;color:#bbb;line-height:1.5}
+.ok{color:#8bc34a}.warn{color:#ffd54f}.mid{color:#ff9800}.bad{color:#ff5252}
 </style>
 </head>
 <body>
 
 <header>
 <h2>CME → GEO Longitude Impact Timeline</h2>
-<button onclick="loadAll()">CACTus + NOAA 太陽風を取得</button>
+<button onclick="loadAll()">現況取得・7日予測作成</button>
 <button onclick="playTimeline()">▶ 再生</button>
 <button onclick="stopTimeline()">停止</button>
 </header>
 
 <main>
 
+<div class="grid">
 <section class="card">
+<h3>① 現況：CACTus CME方向</h3>
+<div class="box"><canvas id="cmeCanvas"></canvas></div>
+<div id="cmeSummary" class="small">未取得</div>
+</section>
+
+<section class="card">
+<h3>② 予測：GEO経度別リスク</h3>
+<div class="box"><canvas id="geoCanvas"></canvas></div>
+<div id="geoSummary" class="small">未取得</div>
+</section>
+</div>
+
+<section class="card" style="margin-top:16px">
 <h3>7日間タイムスライダー</h3>
 <input id="timeSlider" type="range" min="0" max="168" value="0" step="1" oninput="updateTimeView()">
 <div id="timeLabel" class="small"></div>
 </section>
 
-<div class="grid">
-<section class="card">
-<h3>① CME方向</h3>
-<div class="box"><canvas id="cmeCanvas"></canvas></div>
-<div id="cmeSummary" class="small"></div>
+<section class="card" style="margin-top:16px">
+<h3>現況：NOAA太陽風・Kp</h3>
+<div id="windBox" class="small">未取得</div>
 </section>
-
-<section class="card">
-<h3>② GEO経度別リスク</h3>
-<div class="box"><canvas id="geoCanvas"></canvas></div>
-<div id="geoSummary" class="small"></div>
-</section>
-</div>
 
 <section class="card" style="margin-top:16px">
-<h3>CME一覧</h3>
+<h3>CME一覧・到達予測</h3>
 <div id="table"></div>
 </section>
 
 <section class="card" style="margin-top:16px">
-<h3>Status</h3>
+<h3>Status / Raw</h3>
 <pre id="raw">未取得</pre>
 </section>
 
 </main>
 
 <script>
-const CACTUS_URL =
-"https://www.sidc.be/cactus/catalog/LASCO/2_5_0/qkl/2026/05/latestCMEs.html";
+const CACTUS_URL = "https://www.sidc.be/cactus/out/latestCMEs.html";
 
 const NOAA = {
-  plasma:"https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json",
-  mag:"https://services.swpc.noaa.gov/products/solar-wind/mag-1-day.json",
-  kp:"https://services.swpc.noaa.gov/products/noaa-estimated-planetary-k-index-1-minute.json"
+  wind: "https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json",
+  mag: "https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json",
+  kp: "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json",
+  windOld: "https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json",
+  magOld: "https://services.swpc.noaa.gov/products/solar-wind/mag-1-day.json"
 };
 
 let GLOBAL = {
@@ -79,129 +87,205 @@ let GLOBAL = {
   timer: null
 };
 
-async function fetchTextWithFallback(url){
+async function loadAll(){
   try{
-    const r = await fetch(url + "?t=" + Date.now());
-    if(!r.ok) throw new Error(r.status);
-    return await r.text();
+    raw("取得中...");
+
+    const [cactusHtml, wind, mag, kp] = await Promise.all([
+      fetchCactus(CACTUS_URL),
+      fetchJsonWithFallback(NOAA.wind, NOAA.windOld).catch(e => []),
+      fetchJsonWithFallback(NOAA.mag, NOAA.magOld).catch(e => []),
+      fetchJson(NOAA.kp).catch(e => [])
+    ]);
+
+    const cmes = parseCactus(cactusHtml);
+    const sw = parseSolarWind(wind, mag, kp);
+
+    GLOBAL.startTime = new Date();
+    GLOBAL.sw = sw;
+    GLOBAL.cmes = cmes
+      .map(c => modelCME(c, sw))
+      .sort((a,b) => b.impactScore - a.impactScore);
+
+    drawCME(GLOBAL.cmes);
+    renderSolarWind(sw);
+    renderTable(GLOBAL.cmes);
+    updateTimeView();
+
+    raw(JSON.stringify({
+      note: "左側は現況取得、右側は現況からの7日予測",
+      cactusCount: cmes.length,
+      solarWind: sw,
+      topCmes: GLOBAL.cmes.slice(0,15)
+    }, null, 2));
+
   }catch(e){
-    const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
-    const r = await fetch(proxy);
-    if(!r.ok) throw new Error("CACTus取得失敗。CORSの可能性あり。");
-    return await r.text();
+    raw("ERROR: " + e.message);
   }
 }
 
 async function fetchJson(url){
   const r = await fetch(url + "?t=" + Date.now());
-  if(!r.ok) throw new Error(url);
+  if(!r.ok) throw new Error("HTTP " + r.status + " " + url);
   return await r.json();
 }
 
-async function loadAll(){
-  raw("取得中...");
+async function fetchJsonWithFallback(primary, fallback){
+  try{
+    return await fetchJson(primary);
+  }catch(e){
+    return await fetchJson(fallback);
+  }
+}
 
-  const [html, plasma, mag, kp] = await Promise.all([
-    fetchTextWithFallback(CACTUS_URL),
-    fetchJson(NOAA.plasma).catch(()=>[]),
-    fetchJson(NOAA.mag).catch(()=>[]),
-    fetchJson(NOAA.kp).catch(()=>[])
-  ]);
+async function fetchCactus(url){
+  try{
+    const r = await fetch(url + "?t=" + Date.now());
+    if(!r.ok) throw new Error("direct failed");
+    return await r.text();
+  }catch(e){
+    const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
+    const r = await fetch(proxy + "&t=" + Date.now());
+    if(!r.ok) throw new Error("CACTus取得失敗。CORSまたはproxy制限。");
+    return await r.text();
+  }
+}
 
-  const cmes = parseCactus(html);
-  const sw = parseSolarWind(plasma, mag, kp);
-
-  GLOBAL.startTime = new Date();
-  GLOBAL.sw = sw;
-  GLOBAL.cmes = cmes
-    .map(c => modelCME(c, sw))
-    .sort((a,b)=>b.impactScore-a.impactScore);
-
-  drawCME(GLOBAL.cmes);
-  renderTable(GLOBAL.cmes);
-  updateTimeView();
-
-  raw(JSON.stringify({
-    startTime: GLOBAL.startTime.toISOString(),
-    solarWind: sw,
-    cmes: GLOBAL.cmes.slice(0,20)
-  }, null, 2));
+function raw(t){
+  document.getElementById("raw").textContent = t;
 }
 
 function parseCactus(html){
-  const text = html.replace(/<[^>]+>/g," ");
+  const text = html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, " ");
+
   const lines = text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
   const cmes = [];
 
   for(const line of lines){
     const m = line.match(
-      /^(\d+)\s*\|\s*([\d\/]+\s+\d{2}:\d{2})\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([IVX-]*)/
+      /^(\d{4})\s*\|\s*(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2})\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*([IVX]*)/
     );
     if(!m) continue;
 
     cmes.push({
-      id:m[1],
-      t0:m[2],
-      dt0:+m[3],
-      pa:+m[4],
-      da:+m[5],
-      v:+m[6],
-      dv:+m[7],
-      minv:+m[8],
-      maxv:+m[9],
-      halo:m[10] || ""
+      id: m[1],
+      t0: m[2],
+      dt0: Number(m[3]),
+      pa: Number(m[4]),
+      da: Number(m[5]),
+      v: Number(m[6]),
+      dv: Number(m[7]),
+      minv: Number(m[8]),
+      maxv: Number(m[9]),
+      halo: m[10] || ""
     });
   }
+
   return cmes;
 }
 
-function parseSolarWind(plasma, mag, kp){
-  const p = latestDataRow(plasma);
-  const b = latestDataRow(mag);
-  const k = latestDataRow(kp);
+function parseSolarWind(wind, mag, kp){
+  const w = latestRecord(wind);
+  const b = latestRecord(mag);
+  const k = latestRecord(kp);
 
-  const speed = +(p?.[2] || 0);
-  const density = +(p?.[1] || 0);
-  const temp = +(p?.[3] || 0);
+  const speed = pickNumber(w, ["speed", "bulk_speed", "proton_speed", "v", 2]);
+  const density = pickNumber(w, ["density", "proton_density", "np", 1]);
+  const temp = pickNumber(w, ["temperature", "temp", 3]);
 
-  const by = +(b?.[2] || 0);
-  const bz = +(b?.[3] || 0);
-  const bt = +(b?.[6] || 0);
+  const by = pickNumber(b, ["by_gsm", "by", 2]);
+  const bz = pickNumber(b, ["bz_gsm", "bz", 3]);
+  const bt = pickNumber(b, ["bt", "total_field", "bt_total", 6]);
 
-  const kpVal = +(k?.[1] || 0);
+  const kpVal = pickNumber(k, ["kp_index", "kp", "estimated_kp", 1]);
+
   const pdyn = density && speed ? 1.6726e-6 * density * speed * speed : 0;
 
-  return {speed,density,temp,bt,by,bz,kp:kpVal,dynamicPressure:pdyn,time:p?.[0]||""};
+  return {
+    time: getTime(w) || getTime(b) || getTime(k) || "",
+    speed, density, temperature: temp,
+    by, bz, bt,
+    kp: kpVal,
+    dynamicPressure: pdyn
+  };
 }
 
-function latestDataRow(arr){
+function latestRecord(arr){
   if(!Array.isArray(arr)) return null;
   for(let i=arr.length-1;i>=0;i--){
-    if(Array.isArray(arr[i]) && !String(arr[i][0]).toLowerCase().includes("time")) return arr[i];
+    const row = arr[i];
+
+    if(Array.isArray(row)){
+      if(String(row[0]).toLowerCase().includes("time")) continue;
+      return row;
+    }
+
+    if(row && typeof row === "object") return row;
   }
   return null;
 }
 
+function pickNumber(obj, keys){
+  if(!obj) return 0;
+
+  for(const key of keys){
+    if(typeof key === "number" && Array.isArray(obj)){
+      const v = Number(obj[key]);
+      if(Number.isFinite(v)) return v;
+    }
+
+    if(typeof key === "string" && obj[key] !== undefined){
+      const v = Number(obj[key]);
+      if(Number.isFinite(v)) return v;
+    }
+  }
+
+  return 0;
+}
+
+function getTime(obj){
+  if(!obj) return "";
+  if(Array.isArray(obj)) return obj[0] || "";
+  return obj.time_tag || obj.time || obj.observation_time || "";
+}
+
 function modelCME(c, sw){
   const haloScore =
-    c.halo==="IV" ? 45 :
-    c.halo==="III" ? 35 :
-    c.halo==="II" ? 22 :
-    c.da>=90 ? 18 : 0;
+    c.halo === "IV" ? 45 :
+    c.halo === "III" ? 35 :
+    c.halo === "II" ? 22 :
+    c.da >= 90 ? 18 : 0;
 
-  const widthScore = Math.min(30, c.da/4);
-  const speedScore = c.v>=1500 ? 35 : c.v>=1000 ? 28 : c.v>=700 ? 18 : c.v>=500 ? 10 : 3;
-  const earthwardScore = earthwardFromPA(c.pa, c.da);
+  const widthScore = Math.min(30, c.da / 4);
 
-  const shockBoost = sw.dynamicPressure>=8 ? 15 : sw.dynamicPressure>=4 ? 8 : 0;
-  const bzBoost = sw.bz<=-10 ? 18 : sw.bz<=-5 ? 10 : 0;
-  const kpBoost = sw.kp>=6 ? 15 : sw.kp>=5 ? 9 : 0;
+  const speedScore =
+    c.v >= 1500 ? 35 :
+    c.v >= 1000 ? 28 :
+    c.v >= 700 ? 18 :
+    c.v >= 500 ? 10 : 3;
+
+  const earthwardScore = earthwardFromCACTus(c.pa, c.da);
+
+  const shockBoost =
+    sw.dynamicPressure >= 8 ? 15 :
+    sw.dynamicPressure >= 4 ? 8 : 0;
+
+  const bzBoost =
+    sw.bz <= -10 ? 18 :
+    sw.bz <= -5 ? 10 : 0;
+
+  const kpBoost =
+    sw.kp >= 6 ? 15 :
+    sw.kp >= 5 ? 9 : 0;
 
   const impactScore = Math.min(100, Math.round(
     haloScore + widthScore + speedScore + earthwardScore + shockBoost + bzBoost + kpBoost
   ));
 
-  const arrival = estimateArrival(c);
+  const arrival = estimateArrival(c, sw);
 
   return {
     ...c,
@@ -213,29 +297,33 @@ function modelCME(c, sw){
   };
 }
 
-function earthwardFromPA(pa, da){
-  if(da>=270) return 35;
-  if(da>=180) return 28;
-  if(da>=90) return 15;
-  return 5;
+function earthwardFromCACTus(pa, da){
+  if(da >= 270) return 35;
+  if(da >= 180) return 28;
+  if(da >= 90) return 15;
+
+  const limbDistance = Math.min(Math.abs(pa-90), Math.abs(pa-270));
+  if(limbDistance < 35) return 4;
+  return 8;
 }
 
-function estimateArrival(c){
+function estimateArrival(c, sw){
   const auKm = 149597870;
-  let vEff = c.v;
+  const bg = sw.speed && sw.speed > 250 ? sw.speed : 400;
 
-  if(c.v > 450) vEff = 450 + (c.v - 450) * 0.62;
-  if(c.v < 350) vEff = 350;
+  let vEff = c.v;
+  if(c.v > bg) vEff = bg + (c.v - bg) * 0.62;
+  if(c.v < 320) vEff = 320;
 
   const hours = auKm / vEff / 3600;
   const t0 = parseCactusTime(c.t0);
-  const arr = new Date(t0.getTime() + hours*3600*1000);
+  const date = new Date(t0.getTime() + hours*3600*1000);
 
   return {
-    hours:Math.round(hours),
-    date:arr,
-    utc:arr.toISOString(),
-    subsolarLon:subsolarLongitude(arr)
+    hours: Math.round(hours),
+    date,
+    utc: date.toISOString(),
+    subsolarLon: subsolarLongitude(date)
   };
 }
 
@@ -247,79 +335,89 @@ function durationByCME(c){
 }
 
 function parseCactusTime(s){
-  const m=s.match(/(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/);
+  const m = s.match(/(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/);
   if(!m) return new Date();
-  return new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5]));
+  return new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5]));
 }
 
 function subsolarLongitude(date){
   const h = date.getUTCHours() + date.getUTCMinutes()/60;
   let lon = 180 - h*15;
-  while(lon>180) lon-=360;
-  while(lon<-180) lon+=360;
+  while(lon > 180) lon -= 360;
+  while(lon < -180) lon += 360;
   return lon;
 }
 
-function updateTimeView(){
-  const h = +document.getElementById("timeSlider").value;
-  const t = new Date(GLOBAL.startTime.getTime() + h*3600*1000);
-
-  document.getElementById("timeLabel").innerHTML =
-    `<b>${t.toISOString().slice(0,16).replace("T"," ")} UTC</b> / 現在+${h}時間`;
-
-  drawGEO(GLOBAL.cmes, GLOBAL.sw, t);
-}
-
 function setup(id){
-  const c=document.getElementById(id), dpr=devicePixelRatio||1, rct=c.getBoundingClientRect();
-  c.width=rct.width*dpr; c.height=rct.height*dpr;
-  const ctx=c.getContext("2d");
+  const c = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  const rect = c.getBoundingClientRect();
+  c.width = rect.width*dpr;
+  c.height = rect.height*dpr;
+  const ctx = c.getContext("2d");
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  return {ctx,w:rct.width,h:rct.height,cx:rct.width/2,cy:rct.height/2,r:Math.min(rct.width,rct.height)*.38};
+  return {ctx,w:rect.width,h:rect.height,cx:rect.width/2,cy:rect.height/2,r:Math.min(rect.width,rect.height)*0.38};
 }
 
 function drawCME(cmes){
-  const {ctx,w,h,cx,cy,r}=setup("cmeCanvas");
+  const {ctx,w,h,cx,cy,r} = setup("cmeCanvas");
   ctx.clearRect(0,0,w,h);
 
   ctx.beginPath();
   ctx.arc(cx,cy,r,0,Math.PI*2);
-  ctx.fillStyle="#ffb300";
+  ctx.fillStyle = "#ffb300";
   ctx.fill();
-  ctx.strokeStyle="#fff5";
+  ctx.strokeStyle = "#fff5";
   ctx.stroke();
 
+  ctx.fillStyle = "#fff";
+  ctx.font = "13px system-ui";
+  ctx.fillText("現況：CACTus CME PA/DA",12,22);
+
   cmes.slice(0,15).forEach(c=>{
-    const a = (c.pa-90)*Math.PI/180;
-    const half = c.da*Math.PI/360;
+    const a = (c.pa - 90) * Math.PI/180;
+    const half = c.da * Math.PI/360;
     const col = riskColor(c.impactScore);
 
     ctx.beginPath();
     ctx.moveTo(cx,cy);
-    ctx.arc(cx,cy,r*1.2,a-half,a+half);
+    ctx.arc(cx,cy,r*1.22,a-half,a+half);
     ctx.closePath();
-    ctx.fillStyle=col+"44";
+    ctx.fillStyle = col + "44";
     ctx.fill();
 
-    const x=cx+Math.cos(a)*r*.85;
-    const y=cy+Math.sin(a)*r*.85;
-    ctx.fillStyle=col;
+    const x = cx + Math.cos(a)*r*0.87;
+    const y = cy + Math.sin(a)*r*0.87;
+
+    ctx.fillStyle = col;
     ctx.beginPath();
     ctx.arc(x,y,6,0,Math.PI*2);
     ctx.fill();
 
-    ctx.fillStyle="#fff";
-    ctx.font="11px system-ui";
-    ctx.fillText("CME"+c.id,x+8,y);
+    ctx.fillStyle = "#fff";
+    ctx.font = "11px system-ui";
+    ctx.fillText("CME" + c.id, x+8, y);
   });
 
   document.getElementById("cmeSummary").innerHTML =
-    `CME数: <b>${cmes.length}</b><br>` +
-    `扇形: CACTus PA/DA、色: Impact Score`;
+    `取得CME数: <b>${cmes.length}</b><br>` +
+    `表示: 上位15件。扇形=PA/DA、色=Impact Score<br>` +
+    `注意: PA/DAはLASCO画像上の角度で、地球方向判定は幅・halo重視の近似。`;
+}
+
+function updateTimeView(){
+  const slider = document.getElementById("timeSlider");
+  const h = Number(slider.value);
+  const time = new Date(GLOBAL.startTime.getTime() + h*3600*1000);
+
+  document.getElementById("timeLabel").innerHTML =
+    `<b>${time.toISOString().slice(0,16).replace("T"," ")} UTC</b> / 現在+${h}時間`;
+
+  drawGEO(GLOBAL.cmes, GLOBAL.sw, time);
 }
 
 function drawGEO(cmes, sw, time){
-  const {ctx,w,h}=setup("geoCanvas");
+  const {ctx,w,h} = setup("geoCanvas");
   ctx.clearRect(0,0,w,h);
 
   const active = cmes.filter(c => time >= c.activeStart && time <= c.activeEnd);
@@ -336,7 +434,7 @@ function drawGEO(cmes, sw, time){
       const daysideDist = angDist(lon, center);
       const compression = Math.exp(-(daysideDist*daysideDist)/(2*55*55));
 
-      const duskCenter = center - 90;
+      const duskCenter = normalizeLon(center - 90);
       const duskDist = angDist(lon, duskCenter);
       const injection = Math.exp(-(duskDist*duskDist)/(2*70*70));
 
@@ -349,72 +447,76 @@ function drawGEO(cmes, sw, time){
       risk = Math.max(risk, r);
     }
 
-    const col = riskColor(risk);
-    ctx.fillStyle = col;
-    ctx.fillRect(i*w/360, h*.22, w/360+1, h*.28);
+    ctx.fillStyle = riskColor(risk);
+    ctx.fillRect(i*w/360, h*0.22, w/360+1, h*0.28);
   }
 
   drawGeoAxis(ctx,w,h);
 
-  ctx.fillStyle="#fff";
-  ctx.font="13px system-ui";
-  ctx.fillText("Time: " + time.toISOString().slice(0,16).replace("T"," ") + " UTC",12,22);
-  ctx.fillText("Active CME influence: " + active.length,12,h*.62);
-  ctx.fillText("Subsolar GEO longitude: " + center.toFixed(1) + "°",12,h*.68);
-  ctx.fillText(`Solar wind: V=${sw.speed} km/s  Bz=${sw.bz} nT  Pdyn=${sw.dynamicPressure?.toFixed?.(2) || 0} nPa`,12,h*.74);
+  ctx.fillStyle = "#fff";
+  ctx.font = "13px system-ui";
+  ctx.fillText("予測時刻: " + time.toISOString().slice(0,16).replace("T"," ") + " UTC",12,22);
+  ctx.fillText("影響中CME: " + active.length,12,h*0.62);
+  ctx.fillText("昼側GEO中心: " + center.toFixed(1) + "°",12,h*0.68);
+  ctx.fillText(`V=${sw.speed} km/s  Bz=${sw.bz} nT  Pdyn=${sw.dynamicPressure.toFixed(2)} nPa  Kp=${sw.kp}`,12,h*0.74);
 
   document.getElementById("geoSummary").innerHTML =
-    `表示時刻: <b>${time.toISOString().slice(0,16).replace("T"," ")} UTC</b><br>` +
+    `右側は予測：スライダー時刻のGEO経度別リスク<br>` +
     `影響中CME: <b>${active.length}</b><br>` +
     `昼側圧縮中心: <b>${center.toFixed(1)}°</b><br>` +
-    `Bz南向き/Kp高の場合、夕方側注入リスクを追加`;
+    `Bz南向きまたはKp高の場合、夕方側注入リスクを追加。`;
 }
 
 function drawGeoAxis(ctx,w,h){
   [-180,-120,-60,0,60,120,180].forEach(lon=>{
-    const x=(lon+180)/360*w;
-    ctx.strokeStyle="#fff5";
+    const x = (lon+180)/360*w;
+    ctx.strokeStyle = "#fff5";
     ctx.beginPath();
-    ctx.moveTo(x,h*.18);
-    ctx.lineTo(x,h*.55);
+    ctx.moveTo(x,h*0.18);
+    ctx.lineTo(x,h*0.55);
     ctx.stroke();
-    ctx.fillStyle="#fff";
-    ctx.font="11px system-ui";
-    ctx.fillText(lon+"°",x+2,h*.18);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "11px system-ui";
+    ctx.fillText(lon+"°",x+2,h*0.18);
   });
 }
 
-function angDist(a,b){
-  return Math.abs(((a-b+180)%360+360)%360-180);
-}
+function renderSolarWind(sw){
+  const bzClass = sw.bz <= -10 ? "bad" : sw.bz <= -5 ? "warn" : "ok";
+  const pClass = sw.dynamicPressure >= 8 ? "bad" : sw.dynamicPressure >= 4 ? "warn" : "ok";
+  const kpClass = sw.kp >= 6 ? "bad" : sw.kp >= 5 ? "warn" : "ok";
 
-function riskColor(s){
-  if(s>=75)return"#ff1744";
-  if(s>=55)return"#ff9100";
-  if(s>=30)return"#ffee58";
-  return"#8bc34a";
+  document.getElementById("windBox").innerHTML =
+    `時刻: <b>${sw.time || "不明"}</b><br>` +
+    `太陽風速度: <b>${sw.speed}</b> km/s<br>` +
+    `密度: <b>${sw.density}</b> p/cm³<br>` +
+    `Bt: <b>${sw.bt}</b> nT / By: <b>${sw.by}</b> nT / Bz: <b class="${bzClass}">${sw.bz}</b> nT<br>` +
+    `動圧: <b class="${pClass}">${sw.dynamicPressure.toFixed(2)}</b> nPa<br>` +
+    `Kp: <b class="${kpClass}">${sw.kp}</b>`;
 }
 
 function renderTable(cmes){
   document.getElementById("table").innerHTML = `
   <table>
-  <tr>
-    <th>CME</th><th>t0</th><th>PA</th><th>幅</th><th>速度</th>
-    <th>Halo</th><th>Impact</th><th>到達予想</th><th>継続</th>
-  </tr>
-  ${cmes.map(c=>`
     <tr>
-      <td>${c.id}</td>
-      <td>${c.t0}</td>
-      <td>${c.pa}</td>
-      <td>${c.da}</td>
-      <td>${c.v}</td>
-      <td>${c.halo || "-"}</td>
-      <td style="color:${riskColor(c.impactScore)};font-weight:700">${c.impactScore}</td>
-      <td>${c.arrival.utc.slice(0,16).replace("T"," ")}</td>
-      <td>${c.durationHours}h</td>
+      <th>CME</th><th>t0</th><th>PA</th><th>幅</th><th>速度</th><th>Halo</th>
+      <th>Impact</th><th>到達予想</th><th>昼側GEO</th><th>継続</th>
     </tr>
-  `).join("")}
+    ${cmes.map(c=>`
+      <tr>
+        <td>${c.id}</td>
+        <td>${c.t0}</td>
+        <td>${c.pa}</td>
+        <td>${c.da}</td>
+        <td>${c.v}</td>
+        <td>${c.halo || "-"}</td>
+        <td style="color:${riskColor(c.impactScore)};font-weight:700">${c.impactScore}</td>
+        <td>${c.arrival.utc.slice(0,16).replace("T"," ")}</td>
+        <td>${c.arrival.subsolarLon.toFixed(1)}°</td>
+        <td>${c.durationHours}h</td>
+      </tr>
+    `).join("")}
   </table>`;
 }
 
@@ -422,7 +524,7 @@ function playTimeline(){
   stopTimeline();
   GLOBAL.timer = setInterval(()=>{
     const s = document.getElementById("timeSlider");
-    let v = +s.value + 1;
+    let v = Number(s.value) + 1;
     if(v > 168) v = 0;
     s.value = v;
     updateTimeView();
@@ -434,8 +536,24 @@ function stopTimeline(){
   GLOBAL.timer = null;
 }
 
+function angDist(a,b){
+  return Math.abs(((a-b+180)%360+360)%360-180);
+}
+
+function normalizeLon(lon){
+  while(lon > 180) lon -= 360;
+  while(lon < -180) lon += 360;
+  return lon;
+}
+
+function riskColor(s){
+  if(s >= 75) return "#ff1744";
+  if(s >= 55) return "#ff9100";
+  if(s >= 30) return "#ffee58";
+  return "#8bc34a";
+}
+
 loadAll();
 </script>
-
 </body>
 </html>
