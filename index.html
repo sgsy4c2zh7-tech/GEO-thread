@@ -3,29 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SEP Direct Impact Forecast</title>
+<title>CME Earth Arrival Forecast</title>
 <style>
 body{margin:0;background:#070b12;color:#eee;font-family:system-ui,sans-serif}
 header{background:#101826;border-bottom:1px solid #333;padding:16px}
-button{padding:10px 14px;margin:4px;border:0;border-radius:8px;cursor:pointer;font-weight:700}
+button{padding:10px 14px;margin:4px;border:0;border-radius:8px;font-weight:700;cursor:pointer}
 main{padding:16px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px}
 .card{background:#141b27;border:1px solid #333;border-radius:14px;padding:14px}
 .box{position:relative;width:100%;aspect-ratio:1/1;background:#000;border-radius:12px;overflow:hidden}
-.widebox{position:relative;width:100%;height:290px;background:#000;border-radius:12px;overflow:hidden}
+.widebox{position:relative;width:100%;height:300px;background:#000;border-radius:12px;overflow:hidden}
 canvas{position:absolute;inset:0;width:100%;height:100%}
 input[type=range]{width:100%}
 table{width:100%;border-collapse:collapse;font-size:13px}
 td,th{border-bottom:1px solid #333;padding:6px;text-align:left}
 pre{background:#050608;border-radius:10px;padding:10px;white-space:pre-wrap;max-height:320px;overflow:auto}
 .small{font-size:13px;color:#bbb;line-height:1.5}
-.ok{color:#8bc34a}.warn{color:#ffd54f}.mid{color:#ff9800}.bad{color:#ff5252}
 </style>
 </head>
 
 <body>
 <header>
-<h2>SEP Direct Impact Forecast / DONKI + GOES Proton + Parker Spiral</h2>
+<h2>CME Earth Arrival Forecast / DONKI + ENLIL + DBM-lite</h2>
 <button onclick="loadAll()">DONKI + NOAA取得</button>
 <button onclick="playTimeline()">▶ 再生</button>
 <button onclick="stopTimeline()">停止</button>
@@ -35,32 +34,32 @@ pre{background:#050608;border-radius:10px;padding:10px;white-space:pre-wrap;max-
 
 <div class="grid">
 <section class="card">
-<h3>① SEP発生源候補 太陽面</h3>
+<h3>① DONKI CME 太陽面</h3>
 <div class="box"><canvas id="sunCanvas"></canvas></div>
 <div id="sunSummary" class="small"></div>
 </section>
 
 <section class="card">
-<h3>② SEP直接影響タイムライン</h3>
-<div class="box"><canvas id="sepCanvas"></canvas></div>
-<div id="sepSummary" class="small"></div>
+<h3>② 地球到達リスク</h3>
+<div class="box"><canvas id="earthCanvas"></canvas></div>
+<div id="earthSummary" class="small"></div>
 </section>
 </div>
 
 <section class="card" style="margin-top:16px">
-<h3>③ 太陽→地球 SEP伝播</h3>
+<h3>③ 太陽→地球 CME伝播</h3>
 <input id="timeSlider" type="range" min="0" max="168" value="0" step="1" oninput="updateTimeline()">
 <div id="timeLabel" class="small"></div>
 <div class="widebox"><canvas id="flowCanvas"></canvas></div>
 </section>
 
 <section class="card" style="margin-top:16px">
-<h3>GOES Proton / NOAA Solar Wind</h3>
-<div id="protonBox" class="small"></div>
+<h3>NOAA 現況太陽風</h3>
+<div id="windBox" class="small"></div>
 </section>
 
 <section class="card" style="margin-top:16px">
-<h3>SEP候補イベント一覧</h3>
+<h3>CME到達予測一覧</h3>
 <div id="table"></div>
 </section>
 
@@ -74,27 +73,28 @@ pre{background:#050608;border-radius:10px;padding:10px;white-space:pre-wrap;max-
 <script>
 const NASA_KEY = "DEMO_KEY";
 
-const DONKI = {
-  cmeAnalysis: "https://api.nasa.gov/DONKI/CMEAnalysis",
-  sep: "https://api.nasa.gov/DONKI/SEP"
-};
+const DONKI_CME =
+  "https://api.nasa.gov/DONKI/CMEAnalysis";
 
 const NOAA = {
-  protons: "https://services.swpc.noaa.gov/json/goes/primary/integral-protons-6-hour.json",
-  wind: "https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json"
+  wind:"https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json",
+  mag:"https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json",
+  kp:"https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
 };
 
 const SOLAR_ROTATION_DEG_PER_HOUR = 13.2 / 24;
+const AU_KM = 149597870;
 
 let GLOBAL = {
-  events: [],
-  protons: {},
-  wind: {},
+  cmes: [],
+  sw: {},
   startTime: new Date(),
   timer: null
 };
 
-function raw(x){ document.getElementById("raw").textContent = x; }
+function raw(x){
+  document.getElementById("raw").textContent = x;
+}
 
 async function loadAll(){
   raw("取得中...");
@@ -104,45 +104,36 @@ async function loadAll(){
     const start = new Date(now.getTime() - 7*86400000).toISOString().slice(0,10);
     const end = now.toISOString().slice(0,10);
 
-    const cmeUrl =
-      `${DONKI.cmeAnalysis}?startDate=${start}&endDate=${end}&mostAccurateOnly=true&speed=300&api_key=${NASA_KEY}`;
+    const donkiUrl =
+      `${DONKI_CME}?startDate=${start}&endDate=${end}&mostAccurateOnly=true&speed=300&api_key=${NASA_KEY}`;
 
-    const sepUrl =
-      `${DONKI.sep}?startDate=${start}&endDate=${end}&api_key=${NASA_KEY}`;
-
-    const [cmeRaw, sepRaw, protonRaw, windRaw] = await Promise.all([
-      fetchJSON(cmeUrl),
-      fetchJSON(sepUrl).catch(()=>[]),
-      fetchJSON(NOAA.protons),
-      fetchJSON(NOAA.wind).catch(()=>[])
+    const [donki, wind, mag, kp] = await Promise.all([
+      fetchJSON(donkiUrl),
+      fetchJSON(NOAA.wind).catch(()=>[]),
+      fetchJSON(NOAA.mag).catch(()=>[]),
+      fetchJSON(NOAA.kp).catch(()=>[])
     ]);
 
-    const wind = parseWind(windRaw);
-    const protons = parseProtons(protonRaw);
+    const sw = parseSolarWind(wind, mag, kp);
 
-    const events = cmeRaw
-      .map(c => parseCMEtoSEP(c, wind, protons))
+    const cmes = donki
+      .map(c => parseCME(c, sw))
       .filter(Boolean)
-      .sort((a,b)=>b.sepScore-a.sepScore);
+      .sort((a,b)=>b.arrivalScore-a.arrivalScore);
 
-    GLOBAL.events = events;
-    GLOBAL.protons = protons;
-    GLOBAL.wind = wind;
+    GLOBAL.cmes = cmes;
+    GLOBAL.sw = sw;
     GLOBAL.startTime = new Date();
 
-    renderProtonBox(protons, wind, sepRaw);
-    renderTable(events);
+    renderWind(sw);
+    renderTable(cmes);
     updateTimeline();
 
     raw(JSON.stringify({
-      note: "SEP direct impact model: DONKI CMEAnalysis + GOES proton + Parker Spiral connection.",
-      cmeCount: cmeRaw.length,
-      donkiSepCount: sepRaw.length,
-      parkerConnectionLongitude: parkerConnectionLongitude(wind.speed),
-      protons,
-      wind,
-      topEvents: events.slice(0,20),
-      donkiSEP: sepRaw
+      note:"CME Earth arrival model. ENLIL arrival is used first; otherwise DBM-lite.",
+      count:cmes.length,
+      solarWind:sw,
+      cmes:cmes.slice(0,20)
     }, null, 2));
 
   }catch(e){
@@ -157,53 +148,27 @@ async function fetchJSON(url){
   return await r.json();
 }
 
-function parseWind(arr){
-  const row = latest(arr);
-  const speed = pick(row,["speed","proton_speed","bulk_speed",2]) || 400;
-  const density = pick(row,["density","proton_density",1]);
+function parseSolarWind(wind, mag, kp){
+  const w = latest(wind);
+  const b = latest(mag);
+  const k = latest(kp);
+
+  const speed = pick(w,["speed","proton_speed","bulk_speed",2]) || 400;
+  const density = pick(w,["density","proton_density",1]);
+  const by = pick(b,["by_gsm","by",2]);
+  const bz = pick(b,["bz_gsm","bz",3]);
+  const bt = pick(b,["bt","total_field",6]);
+  const kpVal = pick(k,["kp_index","kp","estimated_kp",1]);
+
+  const pdyn = density && speed ? 1.6726e-6 * density * speed * speed : 0;
+  const clock = calcClockAngle(by,bz);
 
   return {
-    time:getTime(row),
-    speed,
-    density,
-    parkerLon: parkerConnectionLongitude(speed)
+    time:getTime(w)||getTime(b)||getTime(k)||"",
+    speed,density,by,bz,bt,kp:kpVal,
+    dynamicPressure:pdyn,
+    clockAngle:clock
   };
-}
-
-function parseProtons(arr){
-  const latest10 = findLatestEnergy(arr, ">=10 MeV");
-  const latest50 = findLatestEnergy(arr, ">=50 MeV");
-  const latest100 = findLatestEnergy(arr, ">=100 MeV");
-
-  return {
-    p10: latest10?.flux ?? 0,
-    p50: latest50?.flux ?? 0,
-    p100: latest100?.flux ?? 0,
-    time: latest10?.time_tag || latest50?.time_tag || latest100?.time_tag || "",
-    scale: radiationScale(latest10?.flux ?? 0)
-  };
-}
-
-function findLatestEnergy(arr, energy){
-  if(!Array.isArray(arr)) return null;
-
-  for(let i=arr.length-1;i>=0;i--){
-    const x = arr[i];
-    if(!x) continue;
-    if(String(x.energy || "").includes(energy)){
-      return x;
-    }
-  }
-  return null;
-}
-
-function radiationScale(p10){
-  if(p10 >= 100000) return "S5";
-  if(p10 >= 10000) return "S4";
-  if(p10 >= 1000) return "S3";
-  if(p10 >= 100) return "S2";
-  if(p10 >= 10) return "S1";
-  return "S0";
 }
 
 function latest(arr){
@@ -239,22 +204,17 @@ function getTime(obj){
   return obj.time_tag || obj.time || obj.observation_time || "";
 }
 
-// Parker Spiral接続経度の簡易推定。
-// 太陽風が遅いほど西側接続点が大きくなる。
-// 400 km/sで約W55を基準。
-function parkerConnectionLongitude(speed){
-  const v = speed || 400;
-  const lon = 55 * (400 / v);
-  return Math.max(25, Math.min(85, lon));
+function calcClockAngle(by,bz){
+  return Math.max(0, Math.min(180, Math.atan2(Math.abs(by), bz)*180/Math.PI));
 }
 
-function parseCMEtoSEP(c, wind, protons){
+function parseCME(c, sw){
   if(!c.speed) return null;
 
   const lon = Number(c.longitude);
   const lat = Number(c.latitude);
   const speed = Number(c.speed);
-  const half = Number(c.halfAngle || 20);
+  const halfAngle = Number(c.halfAngle || 20);
 
   if(!Number.isFinite(lon) || !Number.isFinite(lat) || !Number.isFinite(speed)){
     return null;
@@ -264,120 +224,136 @@ function parseCMEtoSEP(c, wind, protons){
     ? new Date(c.time21_5)
     : new Date(c.activityStartTime || Date.now());
 
-  const connection = magneticConnectionScore(lon, half, wind.parkerLon);
-  const shock = shockScore(speed, half);
-  const width = widthScore(half);
-  const protonNow = protonBoost(protons.p10);
+  const arrival = computeArrival(c, sw);
+  const earthScore = earthDirectedScore(lon, lat, halfAngle);
+  const speedScore = cmeSpeedScore(speed);
+  const widthScore = Math.min(25, halfAngle * 0.45);
+  const arrivalScore = Math.min(100, Math.round(earthScore + speedScore + widthScore));
 
-  const sepScore = Math.min(100, Math.round(connection + shock + width + protonNow));
-
-  const onset = estimateSEPOnset(t0, speed, connection, sepScore);
-  const peak = new Date(onset.getTime() + peakDelayHours(sepScore)*3600*1000);
-  const duration = durationHours(sepScore, half);
+  const durationHours = durationByWidth(halfAngle, speed);
 
   return {
-    id: c.activityID || ("CME-" + Math.random().toString(36).slice(2,7)),
-    catalog: c.catalog || "",
-    lon, lat, speed, halfAngle: half,
+    id:c.activityID || "CME-" + Math.random().toString(36).slice(2,7),
+    catalog:c.catalog || "",
+    lon,lat,speed,halfAngle,
     t0,
-    parkerLon: wind.parkerLon,
-    connectionScore: Math.round(connection),
-    shockScore: Math.round(shock),
-    sepScore,
-    predictedScale: predictedScale(sepScore),
-    onset,
-    peak,
-    end: new Date(onset.getTime() + duration*3600*1000),
-    durationHours: duration
+    arrival,
+    earthScore:Math.round(earthScore),
+    speedScore:Math.round(speedScore),
+    widthScore:Math.round(widthScore),
+    arrivalScore,
+    durationHours,
+    activeStart:new Date(arrival.date.getTime() - 6*3600*1000),
+    activeEnd:new Date(arrival.date.getTime() + durationHours*3600*1000),
+    raw:c
   };
 }
 
-function magneticConnectionScore(lon, half, parkerLon){
-  // DONKI longitude: W側を正とみなす想定
-  const d = Math.abs(lon - parkerLon);
+function earthDirectedScore(lon, lat, half){
+  const angularDistance = Math.sqrt(lon*lon + lat*lat);
 
-  let score = 0;
-
-  if(d <= 15) score = 40;
-  else if(d <= 30) score = 32;
-  else if(d <= 45) score = 22;
-  else if(d <= 65) score = 12;
-  else score = 3;
-
-  // 幅広CMEなら接続しやすい
-  if(half >= 60) score += 10;
-  if(half >= 90) score += 15;
-
-  // 西側W20-W80付近を少し加点
-  if(lon >= 20 && lon <= 80) score += 10;
-
-  return Math.min(55, score);
+  if(angularDistance <= half) return 45;
+  if(angularDistance <= half + 15) return 34;
+  if(angularDistance <= half + 30) return 22;
+  if(angularDistance <= half + 50) return 10;
+  return 2;
 }
 
-function shockScore(speed, half){
-  let s =
-    speed >= 2000 ? 35 :
-    speed >= 1500 ? 28 :
-    speed >= 1000 ? 20 :
-    speed >= 700 ? 12 :
-    speed >= 500 ? 6 : 2;
-
-  if(half >= 60) s += 5;
-  if(half >= 90) s += 8;
-
-  return Math.min(40, s);
+function cmeSpeedScore(speed){
+  if(speed >= 2000) return 30;
+  if(speed >= 1500) return 25;
+  if(speed >= 1000) return 18;
+  if(speed >= 700) return 11;
+  if(speed >= 500) return 6;
+  return 2;
 }
 
-function widthScore(half){
-  return Math.min(20, half * 0.25);
+function computeArrival(c, sw){
+  const enlil = getBestEnlil(c);
+
+  if(enlil && enlil.estimatedShockArrivalTime){
+    const d = new Date(enlil.estimatedShockArrivalTime);
+
+    return {
+      source:"ENLIL",
+      date:d,
+      utc:d.toISOString(),
+      speed:enlil.estimatedDuration || null,
+      kp:enlil.estimatedKp || null,
+      note:"DONKI ENLIL estimatedShockArrivalTime"
+    };
+  }
+
+  const baseTime = c.time21_5
+    ? new Date(c.time21_5)
+    : new Date(c.activityStartTime || Date.now());
+
+  const bg = sw.speed && sw.speed > 250 ? sw.speed : 400;
+
+  let vEff = Number(c.speed);
+
+  // DBM-lite: 高速CMEは背景太陽風に向かって減速
+  if(vEff > bg){
+    vEff = bg + (vEff - bg) * 0.62;
+  }
+
+  // 遅いCMEは背景風にやや近づく
+  if(vEff < bg){
+    vEff = vEff + (bg - vEff) * 0.25;
+  }
+
+  if(vEff < 320) vEff = 320;
+
+  const hours = AU_KM / vEff / 3600;
+  const d = new Date(baseTime.getTime() + hours*3600*1000);
+
+  return {
+    source:"DBM-lite",
+    date:d,
+    utc:d.toISOString(),
+    speed:Math.round(vEff),
+    kp:null,
+    note:"Simple drag-based arrival estimate"
+  };
 }
 
-function protonBoost(p10){
-  if(p10 >= 1000) return 30;
-  if(p10 >= 100) return 22;
-  if(p10 >= 10) return 15;
-  if(p10 >= 1) return 6;
-  return 0;
+function getBestEnlil(c){
+  if(!c.enlilList || !Array.isArray(c.enlilList) || !c.enlilList.length){
+    return null;
+  }
+
+  const valid = c.enlilList
+    .filter(x => x && x.estimatedShockArrivalTime)
+    .sort((a,b)=>{
+      const ta = new Date(a.estimatedShockArrivalTime).getTime();
+      const tb = new Date(b.estimatedShockArrivalTime).getTime();
+      return tb - ta;
+    });
+
+  return valid[0] || null;
 }
 
-function predictedScale(score){
-  if(score >= 90) return "S3+";
-  if(score >= 75) return "S2";
-  if(score >= 55) return "S1";
-  if(score >= 35) return "Watch";
-  return "Low";
-}
-
-function estimateSEPOnset(t0, speed, connection, score){
-  // 高速・接続良好なら早い。遅い/接続悪いなら遅い。
-  let hours =
-    speed >= 1800 ? 0.7 :
-    speed >= 1300 ? 1.2 :
-    speed >= 900 ? 2.5 :
-    speed >= 600 ? 5 : 8;
-
-  if(connection >= 35) hours -= 0.5;
-  if(score >= 75) hours -= 0.3;
-  if(hours < 0.3) hours = 0.3;
-
-  return new Date(t0.getTime() + hours*3600*1000);
-}
-
-function peakDelayHours(score){
-  if(score >= 75) return 4;
-  if(score >= 55) return 7;
-  if(score >= 35) return 12;
-  return 18;
-}
-
-function durationHours(score, half){
-  let h =
-    score >= 75 ? 48 :
-    score >= 55 ? 36 :
-    score >= 35 ? 24 : 12;
-
-  if(half >= 80) h += 12;
+function durationByWidth(half, speed){
+  let h = 12;
+  if(half >= 35) h = 24;
+  if(half >= 60) h = 36;
+  if(half >= 90) h = 48;
+  if(speed >= 1200) h += 6;
   return h;
+}
+
+function rotatedLongitude(c, displayTime){
+  const hours = (displayTime - c.t0) / 3600000;
+  return normalizeLon(c.lon + SOLAR_ROTATION_DEG_PER_HOUR * hours);
+}
+
+function projectSolarOrthographic(latDeg, lonDeg){
+  const lat = latDeg * Math.PI/180;
+  const lon = lonDeg * Math.PI/180;
+  const x = Math.cos(lat) * Math.sin(lon);
+  const y = -Math.sin(lat);
+  const z = Math.cos(lat) * Math.cos(lon);
+  return {x,y,z,visible:z > 0};
 }
 
 function updateTimeline(){
@@ -387,47 +363,42 @@ function updateTimeline(){
   document.getElementById("timeLabel").innerHTML =
     `<b>${t.toISOString().slice(0,16).replace("T"," ")} UTC</b> / 現在+${h}h`;
 
-  drawSun(GLOBAL.events, t);
-  drawSEP(GLOBAL.events, GLOBAL.protons, t);
-  drawFlow(GLOBAL.events, t);
+  drawSun(GLOBAL.cmes,t);
+  drawEarthImpact(GLOBAL.cmes,t);
+  drawFlow(GLOBAL.cmes,t);
 }
 
-function drawSun(events, displayTime){
+function drawSun(cmes,time){
   const {ctx,w,h,cx,cy,r} = setup("sunCanvas");
   ctx.clearRect(0,0,w,h);
 
-  const g = ctx.createRadialGradient(cx-r*0.25,cy-r*0.25,r*0.1,cx,cy,r);
+  const g = ctx.createRadialGradient(cx-r*.25,cy-r*.25,r*.1,cx,cy,r);
   g.addColorStop(0,"#fff59d");
-  g.addColorStop(0.55,"#ffb300");
+  g.addColorStop(.55,"#ffb300");
   g.addColorStop(1,"#e65100");
 
   ctx.beginPath();
   ctx.arc(cx,cy,r,0,Math.PI*2);
-  ctx.fillStyle = g;
+  ctx.fillStyle=g;
   ctx.fill();
   ctx.strokeStyle="#fff5";
-  ctx.lineWidth=2;
   ctx.stroke();
 
   drawSolarGrid(ctx,cx,cy,r);
 
-  // Parker Spiral接続帯
-  const parker = GLOBAL.wind.parkerLon || 55;
-  drawConnectionBand(ctx,cx,cy,r,parker);
-
   ctx.fillStyle="#fff";
   ctx.font="13px system-ui";
-  ctx.fillText("SEP source candidates / Parker spiral connection",12,24);
+  ctx.fillText("DONKI CME source direction",12,24);
   ctx.fillText("N",cx-4,cy-r-10);
   ctx.fillText("S",cx-4,cy+r+20);
   ctx.fillText("E",cx-r-24,cy+4);
   ctx.fillText("W",cx+r+12,cy+4);
 
-  let visible = 0, hidden = 0;
+  let visible=0, hidden=0;
 
-  events.slice(0,40).forEach(e=>{
-    const rotLon = rotatedLongitude(e, displayTime);
-    const p = projectSolarOrthographic(e.lat, rotLon);
+  cmes.slice(0,40).forEach(c=>{
+    const lon = rotatedLongitude(c,time);
+    const p = projectSolarOrthographic(c.lat,lon);
 
     if(!p.visible){
       hidden++;
@@ -438,8 +409,8 @@ function drawSun(events, displayTime){
 
     const x = cx + p.x*r;
     const y = cy + p.y*r;
-    const col = sepColor(e.sepScore);
-    const size = Math.max(5, Math.min(32, e.halfAngle/3));
+    const col = riskColor(c.arrivalScore);
+    const size = Math.max(5,Math.min(30,c.halfAngle/3));
 
     ctx.beginPath();
     ctx.arc(x,y,size+5,0,Math.PI*2);
@@ -451,93 +422,91 @@ function drawSun(events, displayTime){
     ctx.fillStyle=col;
     ctx.fill();
 
-    ctx.strokeStyle="#000";
-    ctx.lineWidth=1;
-    ctx.stroke();
-
     ctx.beginPath();
-    ctx.arc(x,y,Math.min(r*0.35,size+e.halfAngle*0.8),0,Math.PI*2);
+    ctx.arc(x,y,Math.min(r*.35,size+c.halfAngle*.8),0,Math.PI*2);
     ctx.strokeStyle=col+"99";
     ctx.lineWidth=2;
     ctx.stroke();
 
     ctx.fillStyle="#fff";
     ctx.font="11px system-ui";
-    ctx.fillText(shortId(e.id),x+size+6,y);
+    ctx.fillText(shortId(c.id),x+size+6,y);
   });
 
   document.getElementById("sunSummary").innerHTML =
-    `Parker接続経度: <b>W${parker.toFixed(0)}</b><br>`+
-    `表示時刻の太陽面: <b>${visible}</b>件 / 裏面・limb外: <b>${hidden}</b>件<br>`+
-    `色 = SEP score、点サイズ = halfAngle<br>`+
-    `西側W20〜W80付近、特にParker接続帯に近いCMEを高リスク化`;
+    `太陽面表示: <b>${visible}</b>件 / 裏面・limb外: <b>${hidden}</b>件<br>`+
+    `色 = Earth arrival score<br>`+
+    `点サイズ = halfAngle<br>`+
+    `太陽自転をスライダー時刻で反映`;
 }
 
-function drawConnectionBand(ctx,cx,cy,r,parkerLon){
-  ctx.save();
-  ctx.strokeStyle="rgba(80,200,255,0.9)";
-  ctx.lineWidth=3;
+function drawEarthImpact(cmes,time){
+  const {ctx,w,h,cx,cy,r} = setup("earthCanvas");
+  ctx.clearRect(0,0,w,h);
 
-  [-15,0,15].forEach(offset=>{
-    const lon = parkerLon + offset;
-    ctx.beginPath();
-    for(let lat=-65; lat<=65; lat+=2){
-      const p = projectSolarOrthographic(lat, lon);
-      if(!p.visible) continue;
-      const x = cx + p.x*r;
-      const y = cy + p.y*r;
-      if(lat === -65) ctx.moveTo(x,y);
-      else ctx.lineTo(x,y);
+  ctx.fillStyle="#07111f";
+  ctx.fillRect(0,0,w,h);
+
+  const ex = cx;
+  const ey = cy;
+  const er = r*0.32;
+
+  ctx.beginPath();
+  ctx.arc(ex,ey,er,0,Math.PI*2);
+  ctx.fillStyle="#4fc3f7";
+  ctx.fill();
+
+  ctx.strokeStyle="#fff5";
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(ex,ey,er*2.6,0,Math.PI*2);
+  ctx.strokeStyle="#ffffff22";
+  ctx.stroke();
+
+  const active = cmes.filter(c => time >= c.activeStart && time <= c.activeEnd);
+
+  let maxRisk = 0;
+  let best = null;
+
+  active.forEach((c,i)=>{
+    const dt = Math.abs(time - c.arrival.date)/3600000;
+    const tw = Math.exp(-(dt*dt)/(2*12*12));
+    const risk = c.arrivalScore * tw;
+
+    if(risk > maxRisk){
+      maxRisk = risk;
+      best = c;
     }
+
+    const col = riskColor(risk);
+    const rr = er*1.5 + i*8;
+
+    ctx.beginPath();
+    ctx.arc(ex,ey,rr,Math.PI*1.08,Math.PI*1.92);
+    ctx.strokeStyle=col;
+    ctx.lineWidth=4;
     ctx.stroke();
   });
 
-  ctx.fillStyle="#80d8ff";
-  ctx.font="12px system-ui";
-  ctx.fillText("Parker connection",cx+r*0.2,cy-r*0.65);
-  ctx.restore();
-}
-
-function drawSEP(events, protons, time){
-  const {ctx,w,h} = setup("sepCanvas");
-  ctx.clearRect(0,0,w,h);
-
-  const active = events.filter(e => time>=e.onset && time<=e.end);
-
-  for(let i=0;i<360;i++){
-    const lon = -180+i;
-    let risk = 0;
-
-    for(const e of active){
-      const dt = Math.abs(time - e.peak)/3600000;
-      const timeWeight = Math.exp(-(dt*dt)/(2*12*12));
-
-      // SEPはGEO経度差より全体影響が強いが、
-      // 可視化上は接続経度側をやや高くする。
-      const geoWeight = 0.75 + 0.25*Math.exp(-(angDist(lon,e.parkerLon)**2)/(2*70*70));
-
-      const r = e.sepScore * timeWeight * geoWeight;
-      risk = Math.max(risk, r);
-    }
-
-    ctx.fillStyle = sepColor(risk);
-    ctx.fillRect(i*w/360,h*0.25,w/360+1,h*0.3);
-  }
-
-  drawGeoAxis(ctx,w,h);
-
   ctx.fillStyle="#fff";
   ctx.font="13px system-ui";
-  ctx.fillText(`Time: ${time.toISOString().slice(0,16).replace("T"," ")} UTC`,12,22);
-  ctx.fillText(`GOES >=10MeV: ${protons.p10} pfu / ${protons.scale}`,12,h*0.72);
+  ctx.fillText("Earth arrival / shock window",12,24);
+  ctx.fillText(`Active CME windows: ${active.length}`,12,h*0.72);
+  ctx.fillText(`Max arrival risk: ${Math.round(maxRisk)}`,12,h*0.78);
 
-  document.getElementById("sepSummary").innerHTML =
-    `影響中SEP候補: <b>${active.length}</b><br>`+
-    `現在GOES ≥10MeV: <b>${protons.p10}</b> pfu / ${protons.scale}<br>`+
-    `SEPはGEO全体に影響しやすいため、経度差は補助表示です。`;
+  if(best){
+    ctx.fillText(`Top: ${shortId(best.id)} / ${best.arrival.source}`,12,h*0.84);
+    ctx.fillText(`Arrival: ${best.arrival.utc.slice(0,16).replace("T"," ")}`,12,h*0.90);
+  }
+
+  document.getElementById("earthSummary").innerHTML =
+    `影響中CME: <b>${active.length}</b><br>`+
+    `最大到達リスク: <b style="color:${riskColor(maxRisk)}">${Math.round(maxRisk)}</b><br>`+
+    `到達時刻は ENLIL があれば優先、なければ DBM-lite`;
 }
 
-function drawFlow(events,time){
+function drawFlow(cmes,time){
   const {ctx,w,h} = setupWide("flowCanvas");
   ctx.clearRect(0,0,w,h);
 
@@ -563,93 +532,58 @@ function drawFlow(events,time){
   ctx.fillStyle="#fff";
   ctx.font="12px system-ui";
   ctx.fillText("Sun",sx-12,y+48);
-  ctx.fillText("Earth / GEO",ex-34,y+38);
-  ctx.fillText("SEP particle front / fast protons arrive much earlier than CME plasma",12,24);
+  ctx.fillText("Earth",ex-20,y+38);
+  ctx.fillText("CME plasma propagation to Earth",12,24);
 
-  events.slice(0,12).forEach(e=>{
-    const total = e.onset - e.t0;
-    const elapsed = time - e.t0;
-    const frac = Math.max(0,Math.min(1.15,elapsed/total));
+  let drawn = 0;
 
-    if(frac<=0 || frac>1.1) return;
+  cmes.slice(0,15).forEach((c,idx)=>{
+    const total = c.arrival.date - c.t0;
+    const elapsed = time - c.t0;
 
-    const x = sx + frac*len;
-    const col = sepColor(e.sepScore);
+    if(total <= 0) return;
+
+    const frac = elapsed / total;
+
+    if(frac < -0.05 || frac > 1.25) return;
+
+    drawn++;
+
+    const clamped = Math.max(0,Math.min(1.15,frac));
+    const x = sx + clamped*len;
+    const lane = y - 70 + (idx%7)*24;
+    const col = riskColor(c.arrivalScore);
 
     ctx.strokeStyle=col;
-    ctx.lineWidth=Math.max(2,Math.min(18,e.halfAngle/3));
-    ctx.globalAlpha=0.78;
+    ctx.lineWidth=Math.max(2,Math.min(18,c.halfAngle/4));
+    ctx.globalAlpha=0.75;
 
     ctx.beginPath();
-    ctx.arc(x,y,25+e.halfAngle*0.8,-0.9,0.9);
+    ctx.arc(x,lane,22+c.halfAngle*0.7,-0.95,0.95);
     ctx.stroke();
 
     ctx.globalAlpha=1;
 
     ctx.fillStyle=col;
     ctx.beginPath();
-    ctx.arc(x,y,5,0,Math.PI*2);
+    ctx.arc(x,lane,5,0,Math.PI*2);
     ctx.fill();
 
     ctx.fillStyle="#fff";
     ctx.font="11px system-ui";
-    ctx.fillText(`${shortId(e.id)} ${e.predictedScale}`,x+8,y-24);
+
+    const pct = Math.round(clamped*100);
+    ctx.fillText(`${shortId(c.id)} ${pct}%`,x+8,lane-8);
+
+    if(Math.abs(frac-1) < 0.06){
+      ctx.fillStyle="#ff1744";
+      ctx.fillText("ARRIVAL",ex-60,lane-8);
+    }
   });
-}
 
-function renderProtonBox(protons, wind, sepRaw){
-  const cls = protons.scale === "S0" ? "ok" :
-              protons.scale === "S1" ? "warn" :
-              protons.scale === "S2" ? "mid" : "bad";
-
-  document.getElementById("protonBox").innerHTML =
-    `GOES Proton time: <b>${protons.time || "不明"}</b><br>`+
-    `≥10 MeV: <b class="${cls}">${protons.p10}</b> pfu / ${protons.scale}<br>`+
-    `≥50 MeV: <b>${protons.p50}</b> pfu<br>`+
-    `≥100 MeV: <b>${protons.p100}</b> pfu<br>`+
-    `Solar wind speed: <b>${wind.speed}</b> km/s<br>`+
-    `Parker connection longitude: <b>W${wind.parkerLon.toFixed(0)}</b><br>`+
-    `DONKI SEP events in period: <b>${sepRaw.length}</b>`;
-}
-
-function renderTable(events){
-  document.getElementById("table").innerHTML =
-  `<table>
-  <tr>
-    <th>ID</th><th>Lon</th><th>Lat</th><th>Speed</th><th>Half</th>
-    <th>Conn</th><th>SEP</th><th>Scale</th><th>Onset</th><th>Peak</th>
-  </tr>
-  ${
-    events.map(e=>`
-    <tr>
-      <td>${e.id}</td>
-      <td>${e.lon}</td>
-      <td>${e.lat}</td>
-      <td>${e.speed}</td>
-      <td>${e.halfAngle}</td>
-      <td>${e.connectionScore}</td>
-      <td style="color:${sepColor(e.sepScore)};font-weight:700">${e.sepScore}</td>
-      <td>${e.predictedScale}</td>
-      <td>${e.onset.toISOString().slice(0,16).replace("T"," ")}</td>
-      <td>${e.peak.toISOString().slice(0,16).replace("T"," ")}</td>
-    </tr>
-    `).join("")
-  }
-  </table>`;
-}
-
-function rotatedLongitude(e, displayTime){
-  const hours = (displayTime - e.t0) / 3600000;
-  return normalizeLon(e.lon + SOLAR_ROTATION_DEG_PER_HOUR * hours);
-}
-
-function projectSolarOrthographic(latDeg, lonDeg){
-  const lat = latDeg * Math.PI/180;
-  const lon = lonDeg * Math.PI/180;
-  const x = Math.cos(lat) * Math.sin(lon);
-  const y = -Math.sin(lat);
-  const z = Math.cos(lat) * Math.cos(lon);
-  return {x,y,z,visible:z > 0};
+  ctx.fillStyle="#bbb";
+  ctx.font="12px system-ui";
+  ctx.fillText(`Displayed CME fronts: ${drawn}`,12,h-18);
 }
 
 function drawSolarGrid(ctx,cx,cy,r){
@@ -681,44 +615,75 @@ function drawSolarGrid(ctx,cx,cy,r){
   });
 }
 
+function renderWind(sw){
+  document.getElementById("windBox").innerHTML =
+    `Time: <b>${sw.time || "不明"}</b><br>`+
+    `Speed: <b>${sw.speed}</b> km/s<br>`+
+    `Density: <b>${sw.density}</b> p/cm³<br>`+
+    `Bt=${sw.bt} nT / By=${sw.by} nT / Bz=${sw.bz} nT<br>`+
+    `IMF clock angle: <b>${sw.clockAngle.toFixed(1)}°</b><br>`+
+    `Dynamic pressure: <b>${sw.dynamicPressure.toFixed(2)}</b> nPa<br>`+
+    `Kp: <b>${sw.kp}</b>`;
+}
+
+function renderTable(cmes){
+  document.getElementById("table").innerHTML =
+  `<table>
+  <tr>
+    <th>ID</th><th>Lon</th><th>Lat</th><th>Speed</th><th>Half</th>
+    <th>Earth</th><th>ArrivalScore</th><th>Arrival</th><th>Source</th>
+  </tr>
+  ${
+    cmes.map(c=>`
+    <tr>
+      <td>${c.id}</td>
+      <td>${c.lon}</td>
+      <td>${c.lat}</td>
+      <td>${c.speed}</td>
+      <td>${c.halfAngle}</td>
+      <td>${c.earthScore}</td>
+      <td style="color:${riskColor(c.arrivalScore)};font-weight:700">${c.arrivalScore}</td>
+      <td>${c.arrival.utc.slice(0,16).replace("T"," ")}</td>
+      <td>${c.arrival.source}</td>
+    </tr>
+    `).join("")
+  }
+  </table>`;
+}
+
 function setup(id){
   const c = document.getElementById(id);
   const dpr = window.devicePixelRatio || 1;
   const rect = c.getBoundingClientRect();
+
   c.width = rect.width*dpr;
   c.height = rect.height*dpr;
+
   const ctx = c.getContext("2d");
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  return {ctx,w:rect.width,h:rect.height,cx:rect.width/2,cy:rect.height/2,r:Math.min(rect.width,rect.height)*0.38};
+
+  return {
+    ctx,
+    w:rect.width,
+    h:rect.height,
+    cx:rect.width/2,
+    cy:rect.height/2,
+    r:Math.min(rect.width,rect.height)*0.38
+  };
 }
 
 function setupWide(id){
   const c = document.getElementById(id);
   const dpr = window.devicePixelRatio || 1;
   const rect = c.getBoundingClientRect();
+
   c.width = rect.width*dpr;
   c.height = rect.height*dpr;
+
   const ctx = c.getContext("2d");
   ctx.setTransform(dpr,0,0,dpr,0,0);
+
   return {ctx,w:rect.width,h:rect.height};
-}
-
-function drawGeoAxis(ctx,w,h){
-  [-180,-120,-60,0,60,120,180].forEach(lon=>{
-    const x = (lon+180)/360*w;
-    ctx.strokeStyle="#fff5";
-    ctx.beginPath();
-    ctx.moveTo(x,h*0.2);
-    ctx.lineTo(x,h*0.58);
-    ctx.stroke();
-    ctx.fillStyle="#fff";
-    ctx.font="11px system-ui";
-    ctx.fillText(lon+"°",x+2,h*0.2);
-  });
-}
-
-function angDist(a,b){
-  return Math.abs(((a-b+180)%360+360)%360-180);
 }
 
 function normalizeLon(lon){
@@ -727,10 +692,9 @@ function normalizeLon(lon){
   return lon;
 }
 
-function sepColor(s){
-  if(s>=90) return "#d500f9";
-  if(s>=75) return "#ff1744";
-  if(s>=55) return "#ff9100";
+function riskColor(s){
+  if(s>=80) return "#ff1744";
+  if(s>=60) return "#ff9100";
   if(s>=35) return "#ffee58";
   return "#8bc34a";
 }
