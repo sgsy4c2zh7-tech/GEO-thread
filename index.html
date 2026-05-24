@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CME GEO Impact Timeline</title>
+<title>CME GEO Impact Timeline + IMF Clock Angle</title>
 <style>
 body{margin:0;background:#080a0f;color:#eee;font-family:system-ui,sans-serif}
 header{padding:16px;background:#121722;border-bottom:1px solid #333}
@@ -12,6 +12,7 @@ main{padding:16px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(390px,1fr));gap:16px}
 .card{background:#151a24;border:1px solid #333;border-radius:14px;padding:14px}
 .box{position:relative;width:100%;aspect-ratio:1/1;background:#000;border-radius:12px;overflow:hidden}
+.widebox{position:relative;width:100%;height:260px;background:#000;border-radius:12px;overflow:hidden}
 canvas{position:absolute;inset:0;width:100%;height:100%}
 input[type=range]{width:100%}
 pre{background:#050608;border-radius:10px;padding:10px;white-space:pre-wrap;max-height:280px;overflow:auto}
@@ -24,7 +25,7 @@ td,th{border-bottom:1px solid #333;padding:6px;text-align:left}
 <body>
 
 <header>
-<h2>CME → GEO Longitude Impact Timeline</h2>
+<h2>CME → GEO Impact Timeline / IMF Clock Angle Model</h2>
 <button onclick="loadAll()">現況取得・7日予測作成</button>
 <button onclick="playTimeline()">▶ 再生</button>
 <button onclick="stopTimeline()">停止</button>
@@ -47,13 +48,15 @@ td,th{border-bottom:1px solid #333;padding:6px;text-align:left}
 </div>
 
 <section class="card" style="margin-top:16px">
-<h3>7日間タイムスライダー</h3>
+<h3>③ 太陽→地球 吹き付けタイムスライダー</h3>
 <input id="timeSlider" type="range" min="0" max="168" value="0" step="1" oninput="updateTimeView()">
 <div id="timeLabel" class="small"></div>
+<div class="widebox"><canvas id="flowCanvas"></canvas></div>
+<div class="small">左が太陽、右が地球。CMEシェルが地球へ到達する様子を簡易表示します。</div>
 </section>
 
 <section class="card" style="margin-top:16px">
-<h3>現況：NOAA太陽風・Kp</h3>
+<h3>現況：NOAA太陽風・IMF Clock Angle</h3>
 <div id="windBox" class="small">未取得</div>
 </section>
 
@@ -113,7 +116,7 @@ async function loadAll(){
     updateTimeView();
 
     raw(JSON.stringify({
-      note: "左側は現況取得、右側は現況からの7日予測",
+      note: "IMF clock angle = atan2(|By|, Bz) を使用。90°超で南向き寄り、135°超で強結合寄り。",
       cactusCount: cmes.length,
       solarWind: sw,
       topCmes: GLOBAL.cmes.slice(0,15)
@@ -131,11 +134,8 @@ async function fetchJson(url){
 }
 
 async function fetchJsonWithFallback(primary, fallback){
-  try{
-    return await fetchJson(primary);
-  }catch(e){
-    return await fetchJson(fallback);
-  }
+  try{return await fetchJson(primary);}
+  catch(e){return await fetchJson(fallback);}
 }
 
 async function fetchCactus(url){
@@ -151,9 +151,7 @@ async function fetchCactus(url){
   }
 }
 
-function raw(t){
-  document.getElementById("raw").textContent = t;
-}
+function raw(t){document.getElementById("raw").textContent = t;}
 
 function parseCactus(html){
   const text = html
@@ -183,7 +181,6 @@ function parseCactus(html){
       halo: m[10] || ""
     });
   }
-
   return cmes;
 }
 
@@ -192,24 +189,30 @@ function parseSolarWind(wind, mag, kp){
   const b = latestRecord(mag);
   const k = latestRecord(kp);
 
-  const speed = pickNumber(w, ["speed", "bulk_speed", "proton_speed", "v", 2]);
-  const density = pickNumber(w, ["density", "proton_density", "np", 1]);
-  const temp = pickNumber(w, ["temperature", "temp", 3]);
+  const speed = pickNumber(w, ["proton_speed","speed","bulk_speed","v",2]);
+  const density = pickNumber(w, ["proton_density","density","np",1]);
+  const temp = pickNumber(w, ["proton_temperature","temperature","temp",3]);
 
-  const by = pickNumber(b, ["by_gsm", "by", 2]);
-  const bz = pickNumber(b, ["bz_gsm", "bz", 3]);
-  const bt = pickNumber(b, ["bt", "total_field", "bt_total", 6]);
+  const by = pickNumber(b, ["by_gsm","by",2]);
+  const bz = pickNumber(b, ["bz_gsm","bz",3]);
+  const bt = pickNumber(b, ["bt","total_field","bt_total",6]);
 
-  const kpVal = pickNumber(k, ["kp_index", "kp", "estimated_kp", 1]);
+  const kpVal = pickNumber(k, ["kp_index","kp","estimated_kp",1]);
 
   const pdyn = density && speed ? 1.6726e-6 * density * speed * speed : 0;
+  const clockAngle = calcClockAngle(by, bz);
+  const clockFactor = calcClockFactor(clockAngle, bz);
+  const coupling = calcCoupling(speed, bt, by, bz);
 
   return {
     time: getTime(w) || getTime(b) || getTime(k) || "",
     speed, density, temperature: temp,
     by, bz, bt,
     kp: kpVal,
-    dynamicPressure: pdyn
+    dynamicPressure: pdyn,
+    clockAngle,
+    clockFactor,
+    coupling
   };
 }
 
@@ -217,12 +220,10 @@ function latestRecord(arr){
   if(!Array.isArray(arr)) return null;
   for(let i=arr.length-1;i>=0;i--){
     const row = arr[i];
-
     if(Array.isArray(row)){
       if(String(row[0]).toLowerCase().includes("time")) continue;
       return row;
     }
-
     if(row && typeof row === "object") return row;
   }
   return null;
@@ -230,19 +231,16 @@ function latestRecord(arr){
 
 function pickNumber(obj, keys){
   if(!obj) return 0;
-
   for(const key of keys){
     if(typeof key === "number" && Array.isArray(obj)){
       const v = Number(obj[key]);
       if(Number.isFinite(v)) return v;
     }
-
     if(typeof key === "string" && obj[key] !== undefined){
       const v = Number(obj[key]);
       if(Number.isFinite(v)) return v;
     }
   }
-
   return 0;
 }
 
@@ -250,6 +248,28 @@ function getTime(obj){
   if(!obj) return "";
   if(Array.isArray(obj)) return obj[0] || "";
   return obj.time_tag || obj.time || obj.observation_time || "";
+}
+
+// IMF clock angle: 0°=北向き、90°=東西向き、180°=南向き
+function calcClockAngle(by, bz){
+  const angle = Math.atan2(Math.abs(by), bz) * 180 / Math.PI;
+  return Math.max(0, Math.min(180, angle));
+}
+
+function calcClockFactor(clockAngle, bz){
+  if(bz >= 0 && clockAngle < 90) return 0;
+  if(clockAngle >= 150) return 1.0;
+  if(clockAngle >= 135) return 0.8;
+  if(clockAngle >= 120) return 0.55;
+  if(clockAngle >= 90) return 0.3;
+  return 0.05;
+}
+
+// Newell coupling風の簡易指数。厳密式ではなく相対スコア用。
+function calcCoupling(speed, bt, by, bz){
+  const theta = calcClockAngle(by, bz) * Math.PI/180;
+  const sinTerm = Math.pow(Math.sin(theta/2), 4);
+  return Math.round(speed * Math.max(0, bt) * sinTerm);
 }
 
 function modelCME(c, sw){
@@ -273,16 +293,24 @@ function modelCME(c, sw){
     sw.dynamicPressure >= 8 ? 15 :
     sw.dynamicPressure >= 4 ? 8 : 0;
 
-  const bzBoost =
-    sw.bz <= -10 ? 18 :
-    sw.bz <= -5 ? 10 : 0;
+  const clockBoost =
+    sw.clockAngle >= 150 ? 22 :
+    sw.clockAngle >= 135 ? 16 :
+    sw.clockAngle >= 120 ? 10 :
+    sw.clockAngle >= 90 ? 5 : 0;
 
   const kpBoost =
     sw.kp >= 6 ? 15 :
     sw.kp >= 5 ? 9 : 0;
 
+  const couplingBoost =
+    sw.coupling >= 8000 ? 14 :
+    sw.coupling >= 4000 ? 8 :
+    sw.coupling >= 2000 ? 4 : 0;
+
   const impactScore = Math.min(100, Math.round(
-    haloScore + widthScore + speedScore + earthwardScore + shockBoost + bzBoost + kpBoost
+    haloScore + widthScore + speedScore + earthwardScore +
+    shockBoost + clockBoost + kpBoost + couplingBoost
   ));
 
   const arrival = estimateArrival(c, sw);
@@ -301,7 +329,6 @@ function earthwardFromCACTus(pa, da){
   if(da >= 270) return 35;
   if(da >= 180) return 28;
   if(da >= 90) return 15;
-
   const limbDistance = Math.min(Math.abs(pa-90), Math.abs(pa-270));
   if(limbDistance < 35) return 4;
   return 8;
@@ -401,8 +428,8 @@ function drawCME(cmes){
 
   document.getElementById("cmeSummary").innerHTML =
     `取得CME数: <b>${cmes.length}</b><br>` +
-    `表示: 上位15件。扇形=PA/DA、色=Impact Score<br>` +
-    `注意: PA/DAはLASCO画像上の角度で、地球方向判定は幅・halo重視の近似。`;
+    `扇形=PA/DA、色=Impact Score<br>` +
+    `CACTusのhaloは da&gt;90/180/270 を II/III/IV として扱います。`;
 }
 
 function updateTimeView(){
@@ -414,6 +441,7 @@ function updateTimeView(){
     `<b>${time.toISOString().slice(0,16).replace("T"," ")} UTC</b> / 現在+${h}時間`;
 
   drawGEO(GLOBAL.cmes, GLOBAL.sw, time);
+  drawFlow(GLOBAL.cmes, GLOBAL.sw, time);
 }
 
 function drawGEO(cmes, sw, time){
@@ -440,8 +468,8 @@ function drawGEO(cmes, sw, time){
 
       let r = c.impactScore * timeWeight * compression;
 
-      if(sw.bz < -5 || sw.kp >= 5){
-        r += c.impactScore * 0.35 * timeWeight * injection;
+      if(sw.clockAngle >= 120 || sw.kp >= 5){
+        r += c.impactScore * sw.clockFactor * 0.45 * timeWeight * injection;
       }
 
       risk = Math.max(risk, r);
@@ -458,13 +486,119 @@ function drawGEO(cmes, sw, time){
   ctx.fillText("予測時刻: " + time.toISOString().slice(0,16).replace("T"," ") + " UTC",12,22);
   ctx.fillText("影響中CME: " + active.length,12,h*0.62);
   ctx.fillText("昼側GEO中心: " + center.toFixed(1) + "°",12,h*0.68);
-  ctx.fillText(`V=${sw.speed} km/s  Bz=${sw.bz} nT  Pdyn=${sw.dynamicPressure.toFixed(2)} nPa  Kp=${sw.kp}`,12,h*0.74);
+  ctx.fillText(`Clock=${sw.clockAngle.toFixed(0)}°  By=${sw.by}  Bz=${sw.bz}  Pdyn=${sw.dynamicPressure.toFixed(2)} nPa`,12,h*0.74);
 
   document.getElementById("geoSummary").innerHTML =
     `右側は予測：スライダー時刻のGEO経度別リスク<br>` +
     `影響中CME: <b>${active.length}</b><br>` +
     `昼側圧縮中心: <b>${center.toFixed(1)}°</b><br>` +
-    `Bz南向きまたはKp高の場合、夕方側注入リスクを追加。`;
+    `Clock angle 120°以上で夕方側注入リスクを強めます。`;
+}
+
+function drawFlow(cmes, sw, time){
+  const box = document.getElementById("flowCanvas");
+  const dpr = window.devicePixelRatio || 1;
+  const rect = box.getBoundingClientRect();
+  box.width = rect.width*dpr;
+  box.height = rect.height*dpr;
+  const ctx = box.getContext("2d");
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  const w = rect.width, h = rect.height;
+  ctx.clearRect(0,0,w,h);
+
+  const sunX = 70, earthX = w - 80, y = h/2;
+  const pathLen = earthX - sunX;
+
+  ctx.strokeStyle = "#ffffff22";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(sunX,y);
+  ctx.lineTo(earthX,y);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(sunX,y,28,0,Math.PI*2);
+  ctx.fillStyle="#ffb300";
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(earthX,y,14,0,Math.PI*2);
+  ctx.fillStyle="#4fc3f7";
+  ctx.fill();
+
+  ctx.fillStyle="#fff";
+  ctx.font="12px system-ui";
+  ctx.fillText("Sun",sunX-12,y+48);
+  ctx.fillText("Earth / GEO",earthX-34,y+38);
+  ctx.fillText("太陽→地球 CME/太陽風伝播  現在+" + document.getElementById("timeSlider").value + "h",12,22);
+
+  drawSolarWindStream(ctx, sunX, earthX, y, h, sw);
+
+  cmes.slice(0,10).forEach(c=>{
+    const t0 = parseCactusTime(c.t0);
+    const total = c.arrival.date - t0;
+    const elapsed = time - t0;
+    const frac = Math.max(0, Math.min(1.15, elapsed / total));
+
+    if(frac <= 0 || frac > 1.12) return;
+
+    const x = sunX + frac * pathLen;
+    const col = riskColor(c.impactScore);
+
+    ctx.strokeStyle = col;
+    ctx.lineWidth = Math.max(2, Math.min(16, c.da/20));
+    ctx.globalAlpha = 0.75;
+    ctx.beginPath();
+    ctx.arc(x,y,30 + c.da*0.18, -0.9, 0.9);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(x,y,5,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle="#fff";
+    ctx.font="11px system-ui";
+    ctx.fillText("CME"+c.id+" "+Math.round(frac*100)+"%",x+8,y-26);
+  });
+
+  const active = cmes.filter(c => time >= c.activeStart && time <= c.activeEnd);
+  if(active.length){
+    ctx.fillStyle="#ff1744";
+    ctx.font="13px system-ui";
+    ctx.fillText("Impact window active: " + active.length + " CME(s)",earthX-160,26);
+  }
+}
+
+function drawSolarWindStream(ctx, sunX, earthX, y, h, sw){
+  const speedNorm = Math.max(0.2, Math.min(1.2, sw.speed / 600));
+  const n = Math.round(20 * speedNorm);
+
+  ctx.strokeStyle = sw.clockAngle >= 135 ? "#ff5252aa" : sw.clockAngle >= 90 ? "#ffd54faa" : "#8bc34aaa";
+  ctx.lineWidth = 1.5;
+
+  for(let i=0;i<n;i++){
+    const x0 = sunX + 45 + i*(earthX-sunX-90)/n;
+    const yy = y + Math.sin(i*1.7)*35;
+    ctx.beginPath();
+    ctx.moveTo(x0,yy);
+    ctx.lineTo(x0+28*speedNorm, yy);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(x0+28*speedNorm, yy);
+    ctx.lineTo(x0+20*speedNorm, yy-4);
+    ctx.lineTo(x0+20*speedNorm, yy+4);
+    ctx.closePath();
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.fill();
+  }
+
+  ctx.fillStyle="#bbb";
+  ctx.font="11px system-ui";
+  ctx.fillText(`Solar wind V=${sw.speed} km/s / IMF clock=${sw.clockAngle.toFixed(0)}°`,sunX+40,h-18);
 }
 
 function drawGeoAxis(ctx,w,h){
@@ -483,17 +617,20 @@ function drawGeoAxis(ctx,w,h){
 }
 
 function renderSolarWind(sw){
-  const bzClass = sw.bz <= -10 ? "bad" : sw.bz <= -5 ? "warn" : "ok";
+  const clockClass = sw.clockAngle >= 150 ? "bad" : sw.clockAngle >= 120 ? "warn" : "ok";
   const pClass = sw.dynamicPressure >= 8 ? "bad" : sw.dynamicPressure >= 4 ? "warn" : "ok";
   const kpClass = sw.kp >= 6 ? "bad" : sw.kp >= 5 ? "warn" : "ok";
 
   document.getElementById("windBox").innerHTML =
     `時刻: <b>${sw.time || "不明"}</b><br>` +
-    `太陽風速度: <b>${sw.speed}</b> km/s<br>` +
-    `密度: <b>${sw.density}</b> p/cm³<br>` +
-    `Bt: <b>${sw.bt}</b> nT / By: <b>${sw.by}</b> nT / Bz: <b class="${bzClass}">${sw.bz}</b> nT<br>` +
-    `動圧: <b class="${pClass}">${sw.dynamicPressure.toFixed(2)}</b> nPa<br>` +
-    `Kp: <b class="${kpClass}">${sw.kp}</b>`;
+    `太陽風速度: <b>${sw.speed}</b> km/s / 密度: <b>${sw.density}</b> p/cm³<br>` +
+    `Bt: <b>${sw.bt}</b> nT / By: <b>${sw.by}</b> nT / Bz: <b>${sw.bz}</b> nT<br>` +
+    `IMF Clock Angle: <b class="${clockClass}">${sw.clockAngle.toFixed(1)}°</b>　` +
+    `結合係数: <b class="${clockClass}">${sw.clockFactor.toFixed(2)}</b><br>` +
+    `簡易Coupling: <b>${sw.coupling}</b><br>` +
+    `動圧: <b class="${pClass}">${sw.dynamicPressure.toFixed(2)}</b> nPa / ` +
+    `Kp: <b class="${kpClass}">${sw.kp}</b><br>` +
+    `目安: 0°=北向き寄り、90°=横向き、180°=南向き寄り。120°以上から警戒。`;
 }
 
 function renderTable(cmes){
@@ -536,15 +673,8 @@ function stopTimeline(){
   GLOBAL.timer = null;
 }
 
-function angDist(a,b){
-  return Math.abs(((a-b+180)%360+360)%360-180);
-}
-
-function normalizeLon(lon){
-  while(lon > 180) lon -= 360;
-  while(lon < -180) lon += 360;
-  return lon;
-}
+function angDist(a,b){return Math.abs(((a-b+180)%360+360)%360-180);}
+function normalizeLon(lon){while(lon>180)lon-=360;while(lon<-180)lon+=360;return lon;}
 
 function riskColor(s){
   if(s >= 75) return "#ff1744";
