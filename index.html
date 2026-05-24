@@ -3,30 +3,117 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CME GEO Impact Timeline + IMF Clock Angle</title>
+<title>DONKI CME GEO Risk System</title>
+
 <style>
-body{margin:0;background:#080a0f;color:#eee;font-family:system-ui,sans-serif}
-header{padding:16px;background:#121722;border-bottom:1px solid #333}
-button{padding:10px 14px;margin:4px;border:0;border-radius:8px;font-weight:700;cursor:pointer}
-main{padding:16px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(390px,1fr));gap:16px}
-.card{background:#151a24;border:1px solid #333;border-radius:14px;padding:14px}
-.box{position:relative;width:100%;aspect-ratio:1/1;background:#000;border-radius:12px;overflow:hidden}
-.widebox{position:relative;width:100%;height:260px;background:#000;border-radius:12px;overflow:hidden}
-canvas{position:absolute;inset:0;width:100%;height:100%}
-input[type=range]{width:100%}
-pre{background:#050608;border-radius:10px;padding:10px;white-space:pre-wrap;max-height:280px;overflow:auto}
-table{width:100%;border-collapse:collapse;font-size:13px}
-td,th{border-bottom:1px solid #333;padding:6px;text-align:left}
-.small{font-size:13px;color:#bbb;line-height:1.5}
-.ok{color:#8bc34a}.warn{color:#ffd54f}.mid{color:#ff9800}.bad{color:#ff5252}
+body{
+  margin:0;
+  background:#070b12;
+  color:#eee;
+  font-family:system-ui,sans-serif;
+}
+
+header{
+  background:#101826;
+  border-bottom:1px solid #333;
+  padding:16px;
+}
+
+button{
+  padding:10px 14px;
+  border:0;
+  border-radius:8px;
+  background:#1e88e5;
+  color:#fff;
+  cursor:pointer;
+  margin-right:8px;
+  font-weight:700;
+}
+
+main{
+  padding:16px;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(420px,1fr));
+  gap:16px;
+}
+
+.card{
+  background:#141b28;
+  border:1px solid #333;
+  border-radius:14px;
+  padding:14px;
+}
+
+.box{
+  position:relative;
+  width:100%;
+  aspect-ratio:1/1;
+  background:#000;
+  border-radius:12px;
+  overflow:hidden;
+}
+
+.widebox{
+  position:relative;
+  width:100%;
+  height:260px;
+  background:#000;
+  border-radius:12px;
+  overflow:hidden;
+}
+
+canvas{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+}
+
+input[type=range]{
+  width:100%;
+}
+
+pre{
+  background:#050608;
+  border-radius:10px;
+  padding:10px;
+  overflow:auto;
+  max-height:300px;
+  white-space:pre-wrap;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+}
+
+td,th{
+  border-bottom:1px solid #333;
+  padding:6px;
+  text-align:left;
+}
+
+.small{
+  color:#bbb;
+  font-size:13px;
+  line-height:1.5;
+}
 </style>
 </head>
+
 <body>
 
 <header>
-<h2>CME → GEO Impact Timeline / IMF Clock Angle Model</h2>
-<button onclick="loadAll()">現況取得・7日予測作成</button>
+<h2>DONKI CME → GEO Longitude Risk System</h2>
+
+<button onclick="loadAll()">
+DONKI + NOAA取得
+</button>
+
 <button onclick="playTimeline()">▶ 再生</button>
 <button onclick="stopTimeline()">停止</button>
 </header>
@@ -34,487 +121,560 @@ td,th{border-bottom:1px solid #333;padding:6px;text-align:left}
 <main>
 
 <div class="grid">
+
 <section class="card">
-<h3>① 現況：CACTus CME方向</h3>
-<div class="box"><canvas id="cmeCanvas"></canvas></div>
-<div id="cmeSummary" class="small">未取得</div>
+<h3>① DONKI CME 現況</h3>
+
+<div class="box">
+<canvas id="sunCanvas"></canvas>
+</div>
+
+<div id="sunInfo" class="small">
+未取得
+</div>
 </section>
 
 <section class="card">
-<h3>② 予測：GEO経度別リスク</h3>
-<div class="box"><canvas id="geoCanvas"></canvas></div>
-<div id="geoSummary" class="small">未取得</div>
+<h3>② GEO経度別リスク</h3>
+
+<div class="box">
+<canvas id="geoCanvas"></canvas>
+</div>
+
+<div id="geoInfo" class="small">
+未取得
+</div>
 </section>
+
 </div>
 
 <section class="card" style="margin-top:16px">
-<h3>③ 太陽→地球 吹き付けタイムスライダー</h3>
-<input id="timeSlider" type="range" min="0" max="168" value="0" step="1" oninput="updateTimeView()">
+<h3>③ 太陽→地球 CME伝播</h3>
+
+<input
+id="timeSlider"
+type="range"
+min="0"
+max="168"
+value="0"
+step="1"
+oninput="updateTimeline()">
+
 <div id="timeLabel" class="small"></div>
-<div class="widebox"><canvas id="flowCanvas"></canvas></div>
-<div class="small">左が太陽、右が地球。CMEシェルが地球へ到達する様子を簡易表示します。</div>
+
+<div class="widebox">
+<canvas id="flowCanvas"></canvas>
+</div>
+
 </section>
 
 <section class="card" style="margin-top:16px">
-<h3>現況：NOAA太陽風・IMF Clock Angle</h3>
-<div id="windBox" class="small">未取得</div>
+<h3>④ NOAA RTSW 現況</h3>
+
+<div id="swInfo" class="small">
+未取得
+</div>
 </section>
 
 <section class="card" style="margin-top:16px">
-<h3>CME一覧・到達予測</h3>
+<h3>⑤ CME一覧</h3>
 <div id="table"></div>
 </section>
 
 <section class="card" style="margin-top:16px">
-<h3>Status / Raw</h3>
+<h3>Status</h3>
 <pre id="raw">未取得</pre>
 </section>
 
 </main>
 
 <script>
-const CACTUS_URL = "https://www.sidc.be/cactus/out/latestCMEs.html";
+
+const NASA_KEY = "DEMO_KEY";
+
+const DONKI =
+`https://api.nasa.gov/DONKI/CMEAnalysis
+?startDate=${dateDaysAgo(5)}
+&endDate=${dateToday()}
+&mostAccurateOnly=true
+&speed=500
+&halfAngle=20
+&catalog=ALL
+&api_key=${NASA_KEY}`.replace(/\s+/g,'');
 
 const NOAA = {
-  wind: "https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json",
-  mag: "https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json",
-  kp: "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json",
-  windOld: "https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json",
-  magOld: "https://services.swpc.noaa.gov/products/solar-wind/mag-1-day.json"
+  wind:"https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json",
+  mag:"https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json",
+  kp:"https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
 };
 
 let GLOBAL = {
-  cmes: [],
-  sw: {},
-  startTime: new Date(),
-  timer: null
+  cmes:[],
+  sw:{},
+  startTime:new Date(),
+  timer:null
 };
 
-async function loadAll(){
-  try{
-    raw("取得中...");
+function dateToday(){
+  return new Date().toISOString().slice(0,10);
+}
 
-    const [cactusHtml, wind, mag, kp] = await Promise.all([
-      fetchCactus(CACTUS_URL),
-      fetchJsonWithFallback(NOAA.wind, NOAA.windOld).catch(e => []),
-      fetchJsonWithFallback(NOAA.mag, NOAA.magOld).catch(e => []),
-      fetchJson(NOAA.kp).catch(e => [])
+function dateDaysAgo(d){
+  const t=new Date(Date.now()-d*86400000);
+  return t.toISOString().slice(0,10);
+}
+
+async function loadAll(){
+
+  try{
+
+    raw("DONKI取得中...");
+
+    const [donki, wind, mag, kp] = await Promise.all([
+      fetchJson(DONKI),
+      fetchJson(NOAA.wind).catch(()=>[]),
+      fetchJson(NOAA.mag).catch(()=>[]),
+      fetchJson(NOAA.kp).catch(()=>[])
     ]);
 
-    const cmes = parseCactus(cactusHtml);
-    const sw = parseSolarWind(wind, mag, kp);
+    const sw = parseSolarWind(wind,mag,kp);
 
-    GLOBAL.startTime = new Date();
     GLOBAL.sw = sw;
-    GLOBAL.cmes = cmes
-      .map(c => modelCME(c, sw))
-      .sort((a,b) => b.impactScore - a.impactScore);
 
-    drawCME(GLOBAL.cmes);
+    GLOBAL.cmes =
+      donki
+      .map(c => normalizeDONKI(c,sw))
+      .sort((a,b)=>b.impactScore-a.impactScore);
+
+    drawSun(GLOBAL.cmes);
+
     renderSolarWind(sw);
+
     renderTable(GLOBAL.cmes);
-    updateTimeView();
+
+    updateTimeline();
 
     raw(JSON.stringify({
-      note: "IMF clock angle = atan2(|By|, Bz) を使用。90°超で南向き寄り、135°超で強結合寄り。",
-      cactusCount: cmes.length,
-      solarWind: sw,
-      topCmes: GLOBAL.cmes.slice(0,15)
-    }, null, 2));
+      cmeCount:GLOBAL.cmes.length,
+      solarWind:sw,
+      topCmes:GLOBAL.cmes.slice(0,10)
+    },null,2));
 
   }catch(e){
-    raw("ERROR: " + e.message);
+
+    raw("ERROR: "+e.message);
+
   }
+
 }
 
 async function fetchJson(url){
-  const r = await fetch(url + "?t=" + Date.now());
-  if(!r.ok) throw new Error("HTTP " + r.status + " " + url);
+
+  const r = await fetch(url+"&t="+Date.now());
+
+  if(!r.ok)
+    throw new Error("HTTP "+r.status);
+
   return await r.json();
+
 }
 
-async function fetchJsonWithFallback(primary, fallback){
-  try{return await fetchJson(primary);}
-  catch(e){return await fetchJson(fallback);}
-}
+function parseSolarWind(wind,mag,kp){
 
-async function fetchCactus(url){
-  try{
-    const r = await fetch(url + "?t=" + Date.now());
-    if(!r.ok) throw new Error("direct failed");
-    return await r.text();
-  }catch(e){
-    const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
-    const r = await fetch(proxy + "&t=" + Date.now());
-    if(!r.ok) throw new Error("CACTus取得失敗。CORSまたはproxy制限。");
-    return await r.text();
-  }
-}
+  const w = wind.at(-1) || {};
+  const b = mag.at(-1) || {};
+  const k = kp.at(-1) || {};
 
-function raw(t){document.getElementById("raw").textContent = t;}
+  const speed =
+    Number(w.proton_speed || w.speed || 400);
 
-function parseCactus(html){
-  const text = html
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n")
-    .replace(/<[^>]+>/g, " ");
+  const density =
+    Number(w.proton_density || w.density || 5);
 
-  const lines = text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
-  const cmes = [];
+  const by =
+    Number(b.by_gsm || b.by || 0);
 
-  for(const line of lines){
-    const m = line.match(
-      /^(\d{4})\s*\|\s*(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2})\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*([IVX]*)/
-    );
-    if(!m) continue;
+  const bz =
+    Number(b.bz_gsm || b.bz || 0);
 
-    cmes.push({
-      id: m[1],
-      t0: m[2],
-      dt0: Number(m[3]),
-      pa: Number(m[4]),
-      da: Number(m[5]),
-      v: Number(m[6]),
-      dv: Number(m[7]),
-      minv: Number(m[8]),
-      maxv: Number(m[9]),
-      halo: m[10] || ""
-    });
-  }
-  return cmes;
-}
+  const bt =
+    Number(b.bt || 5);
 
-function parseSolarWind(wind, mag, kp){
-  const w = latestRecord(wind);
-  const b = latestRecord(mag);
-  const k = latestRecord(kp);
+  const kpVal =
+    Number(k.kp_index || k.kp || 2);
 
-  const speed = pickNumber(w, ["proton_speed","speed","bulk_speed","v",2]);
-  const density = pickNumber(w, ["proton_density","density","np",1]);
-  const temp = pickNumber(w, ["proton_temperature","temperature","temp",3]);
+  const pdyn =
+    1.6726e-6 * density * speed * speed;
 
-  const by = pickNumber(b, ["by_gsm","by",2]);
-  const bz = pickNumber(b, ["bz_gsm","bz",3]);
-  const bt = pickNumber(b, ["bt","total_field","bt_total",6]);
+  const clock =
+    calcClockAngle(by,bz);
 
-  const kpVal = pickNumber(k, ["kp_index","kp","estimated_kp",1]);
-
-  const pdyn = density && speed ? 1.6726e-6 * density * speed * speed : 0;
-  const clockAngle = calcClockAngle(by, bz);
-  const clockFactor = calcClockFactor(clockAngle, bz);
-  const coupling = calcCoupling(speed, bt, by, bz);
+  const coupling =
+    calcCoupling(speed,bt,by,bz);
 
   return {
-    time: getTime(w) || getTime(b) || getTime(k) || "",
-    speed, density, temperature: temp,
-    by, bz, bt,
-    kp: kpVal,
-    dynamicPressure: pdyn,
-    clockAngle,
-    clockFactor,
+    speed,density,by,bz,bt,
+    kp:kpVal,
+    dynamicPressure:pdyn,
+    clockAngle:clock,
     coupling
   };
 }
 
-function latestRecord(arr){
-  if(!Array.isArray(arr)) return null;
-  for(let i=arr.length-1;i>=0;i--){
-    const row = arr[i];
-    if(Array.isArray(row)){
-      if(String(row[0]).toLowerCase().includes("time")) continue;
-      return row;
-    }
-    if(row && typeof row === "object") return row;
-  }
-  return null;
+function calcClockAngle(by,bz){
+
+  return Math.max(
+    0,
+    Math.min(
+      180,
+      Math.atan2(Math.abs(by),bz)*180/Math.PI
+    )
+  );
+
 }
 
-function pickNumber(obj, keys){
-  if(!obj) return 0;
-  for(const key of keys){
-    if(typeof key === "number" && Array.isArray(obj)){
-      const v = Number(obj[key]);
-      if(Number.isFinite(v)) return v;
-    }
-    if(typeof key === "string" && obj[key] !== undefined){
-      const v = Number(obj[key]);
-      if(Number.isFinite(v)) return v;
-    }
-  }
-  return 0;
+function calcCoupling(speed,bt,by,bz){
+
+  const theta =
+    calcClockAngle(by,bz)*Math.PI/180;
+
+  return Math.round(
+    speed *
+    Math.max(0,bt) *
+    Math.pow(Math.sin(theta/2),4)
+  );
+
 }
 
-function getTime(obj){
-  if(!obj) return "";
-  if(Array.isArray(obj)) return obj[0] || "";
-  return obj.time_tag || obj.time || obj.observation_time || "";
-}
+function normalizeDONKI(c,sw){
 
-// IMF clock angle: 0°=北向き、90°=東西向き、180°=南向き
-function calcClockAngle(by, bz){
-  const angle = Math.atan2(Math.abs(by), bz) * 180 / Math.PI;
-  return Math.max(0, Math.min(180, angle));
-}
+  const lon = Number(c.longitude || 0);
+  const lat = Number(c.latitude || 0);
+  const speed = Number(c.speed || 500);
+  const halfAngle = Number(c.halfAngle || 30);
 
-function calcClockFactor(clockAngle, bz){
-  if(bz >= 0 && clockAngle < 90) return 0;
-  if(clockAngle >= 150) return 1.0;
-  if(clockAngle >= 135) return 0.8;
-  if(clockAngle >= 120) return 0.55;
-  if(clockAngle >= 90) return 0.3;
-  return 0.05;
-}
+  const earthDirected =
+    Math.abs(lon) < 40
+    ? 1
+    : Math.abs(lon) < 70
+    ? 0.6
+    : 0.2;
 
-// Newell coupling風の簡易指数。厳密式ではなく相対スコア用。
-function calcCoupling(speed, bt, by, bz){
-  const theta = calcClockAngle(by, bz) * Math.PI/180;
-  const sinTerm = Math.pow(Math.sin(theta/2), 4);
-  return Math.round(speed * Math.max(0, bt) * sinTerm);
-}
-
-function modelCME(c, sw){
-  const haloScore =
-    c.halo === "IV" ? 45 :
-    c.halo === "III" ? 35 :
-    c.halo === "II" ? 22 :
-    c.da >= 90 ? 18 : 0;
-
-  const widthScore = Math.min(30, c.da / 4);
+  const widthScore =
+    Math.min(30,halfAngle);
 
   const speedScore =
-    c.v >= 1500 ? 35 :
-    c.v >= 1000 ? 28 :
-    c.v >= 700 ? 18 :
-    c.v >= 500 ? 10 : 3;
+    speed>=2000 ? 40 :
+    speed>=1500 ? 32 :
+    speed>=1000 ? 24 :
+    speed>=700 ? 16 :
+    8;
 
-  const earthwardScore = earthwardFromCACTus(c.pa, c.da);
+  const earthScore =
+    earthDirected * 35;
 
-  const shockBoost =
-    sw.dynamicPressure >= 8 ? 15 :
-    sw.dynamicPressure >= 4 ? 8 : 0;
+  const clockScore =
+    sw.clockAngle>=150 ? 20 :
+    sw.clockAngle>=135 ? 14 :
+    sw.clockAngle>=120 ? 8 :
+    0;
 
-  const clockBoost =
-    sw.clockAngle >= 150 ? 22 :
-    sw.clockAngle >= 135 ? 16 :
-    sw.clockAngle >= 120 ? 10 :
-    sw.clockAngle >= 90 ? 5 : 0;
+  const pressureScore =
+    sw.dynamicPressure>=8 ? 14 :
+    sw.dynamicPressure>=4 ? 8 :
+    0;
 
-  const kpBoost =
-    sw.kp >= 6 ? 15 :
-    sw.kp >= 5 ? 9 : 0;
+  const kpScore =
+    sw.kp>=6 ? 15 :
+    sw.kp>=5 ? 8 :
+    0;
 
-  const couplingBoost =
-    sw.coupling >= 8000 ? 14 :
-    sw.coupling >= 4000 ? 8 :
-    sw.coupling >= 2000 ? 4 : 0;
+  const couplingScore =
+    sw.coupling>=8000 ? 14 :
+    sw.coupling>=4000 ? 8 :
+    0;
 
-  const impactScore = Math.min(100, Math.round(
-    haloScore + widthScore + speedScore + earthwardScore +
-    shockBoost + clockBoost + kpBoost + couplingBoost
-  ));
+  const impactScore = Math.min(
+    100,
+    Math.round(
+      widthScore+
+      speedScore+
+      earthScore+
+      clockScore+
+      pressureScore+
+      kpScore+
+      couplingScore
+    )
+  );
 
-  const arrival = estimateArrival(c, sw);
+  const arrival =
+    estimateArrival(c,sw);
 
   return {
     ...c,
+    lon,
+    lat,
+    speed,
+    halfAngle,
     impactScore,
     arrival,
-    durationHours: durationByCME(c),
-    activeStart: new Date(arrival.date.getTime() - 6*3600*1000),
-    activeEnd: new Date(arrival.date.getTime() + durationByCME(c)*3600*1000)
+    activeStart:
+      new Date(arrival.date.getTime()-6*3600*1000),
+    activeEnd:
+      new Date(arrival.date.getTime()+36*3600*1000)
   };
+
 }
 
-function earthwardFromCACTus(pa, da){
-  if(da >= 270) return 35;
-  if(da >= 180) return 28;
-  if(da >= 90) return 15;
-  const limbDistance = Math.min(Math.abs(pa-90), Math.abs(pa-270));
-  if(limbDistance < 35) return 4;
-  return 8;
-}
+function estimateArrival(c,sw){
 
-function estimateArrival(c, sw){
-  const auKm = 149597870;
-  const bg = sw.speed && sw.speed > 250 ? sw.speed : 400;
+  if(
+    c.enlilList &&
+    c.enlilList.length &&
+    c.enlilList[0].estimatedShockArrivalTime
+  ){
 
-  let vEff = c.v;
-  if(c.v > bg) vEff = bg + (c.v - bg) * 0.62;
-  if(c.v < 320) vEff = 320;
+    const d =
+      new Date(
+        c.enlilList[0].estimatedShockArrivalTime
+      );
 
-  const hours = auKm / vEff / 3600;
-  const t0 = parseCactusTime(c.t0);
-  const date = new Date(t0.getTime() + hours*3600*1000);
+    return {
+      source:"ENLIL",
+      date:d,
+      utc:d.toISOString()
+    };
+
+  }
+
+  const speed = Number(c.speed || 500);
+
+  const bg =
+    sw.speed>250 ? sw.speed : 400;
+
+  let vEff = speed;
+
+  if(speed>bg)
+    vEff = bg + (speed-bg)*0.62;
+
+  const hours =
+    149597870 / vEff / 3600;
+
+  const t0 =
+    new Date(c.time21_5);
+
+  const d =
+    new Date(
+      t0.getTime() + hours*3600*1000
+    );
 
   return {
-    hours: Math.round(hours),
-    date,
-    utc: date.toISOString(),
-    subsolarLon: subsolarLongitude(date)
+    source:"DBM",
+    date:d,
+    utc:d.toISOString()
   };
+
 }
 
-function durationByCME(c){
-  if(c.da >= 270) return 48;
-  if(c.da >= 180) return 36;
-  if(c.da >= 90) return 24;
-  return 12;
-}
+function drawSun(cmes){
 
-function parseCactusTime(s){
-  const m = s.match(/(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/);
-  if(!m) return new Date();
-  return new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5]));
-}
+  const {ctx,w,h,cx,cy,r} =
+    setup("sunCanvas");
 
-function subsolarLongitude(date){
-  const h = date.getUTCHours() + date.getUTCMinutes()/60;
-  let lon = 180 - h*15;
-  while(lon > 180) lon -= 360;
-  while(lon < -180) lon += 360;
-  return lon;
-}
-
-function setup(id){
-  const c = document.getElementById(id);
-  const dpr = window.devicePixelRatio || 1;
-  const rect = c.getBoundingClientRect();
-  c.width = rect.width*dpr;
-  c.height = rect.height*dpr;
-  const ctx = c.getContext("2d");
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-  return {ctx,w:rect.width,h:rect.height,cx:rect.width/2,cy:rect.height/2,r:Math.min(rect.width,rect.height)*0.38};
-}
-
-function drawCME(cmes){
-  const {ctx,w,h,cx,cy,r} = setup("cmeCanvas");
   ctx.clearRect(0,0,w,h);
 
   ctx.beginPath();
   ctx.arc(cx,cy,r,0,Math.PI*2);
-  ctx.fillStyle = "#ffb300";
+  ctx.fillStyle="#ffb300";
   ctx.fill();
-  ctx.strokeStyle = "#fff5";
+
+  ctx.strokeStyle="#fff5";
   ctx.stroke();
 
-  ctx.fillStyle = "#fff";
-  ctx.font = "13px system-ui";
-  ctx.fillText("現況：CACTus CME PA/DA",12,22);
+  ctx.fillStyle="#fff";
+  ctx.font="13px system-ui";
+  ctx.fillText(
+    "DONKI CMEAnalysis",
+    12,22
+  );
 
   cmes.slice(0,15).forEach(c=>{
-    const a = (c.pa - 90) * Math.PI/180;
-    const half = c.da * Math.PI/360;
-    const col = riskColor(c.impactScore);
+
+    const x =
+      cx + (c.lon/90)*r;
+
+    const y =
+      cy - (c.lat/90)*r;
+
+    const col =
+      riskColor(c.impactScore);
+
+    ctx.fillStyle=col;
 
     ctx.beginPath();
-    ctx.moveTo(cx,cy);
-    ctx.arc(cx,cy,r*1.22,a-half,a+half);
-    ctx.closePath();
-    ctx.fillStyle = col + "44";
+
+    ctx.arc(
+      x,
+      y,
+      Math.max(4,c.halfAngle*0.35),
+      0,
+      Math.PI*2
+    );
+
     ctx.fill();
 
-    const x = cx + Math.cos(a)*r*0.87;
-    const y = cy + Math.sin(a)*r*0.87;
+    ctx.fillStyle="#fff";
+    ctx.font="11px system-ui";
 
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.arc(x,y,6,0,Math.PI*2);
-    ctx.fill();
+    ctx.fillText(
+      "CME",
+      x+8,
+      y
+    );
 
-    ctx.fillStyle = "#fff";
-    ctx.font = "11px system-ui";
-    ctx.fillText("CME" + c.id, x+8, y);
   });
 
-  document.getElementById("cmeSummary").innerHTML =
-    `取得CME数: <b>${cmes.length}</b><br>` +
-    `扇形=PA/DA、色=Impact Score<br>` +
-    `CACTusのhaloは da&gt;90/180/270 を II/III/IV として扱います。`;
+  document.getElementById("sunInfo").innerHTML =
+    `DONKI CME数: <b>${cmes.length}</b><br>`+
+    `円サイズ=halfAngle<br>`+
+    `色=Impact Score<br>`+
+    `位置=longitude/latitude`;
+
 }
 
-function updateTimeView(){
-  const slider = document.getElementById("timeSlider");
-  const h = Number(slider.value);
-  const time = new Date(GLOBAL.startTime.getTime() + h*3600*1000);
+function updateTimeline(){
+
+  const h =
+    Number(
+      document.getElementById("timeSlider").value
+    );
+
+  const time =
+    new Date(
+      GLOBAL.startTime.getTime()+h*3600*1000
+    );
 
   document.getElementById("timeLabel").innerHTML =
-    `<b>${time.toISOString().slice(0,16).replace("T"," ")} UTC</b> / 現在+${h}時間`;
+    `<b>${time.toISOString().slice(0,16).replace("T"," ")}</b> UTC`;
 
-  drawGEO(GLOBAL.cmes, GLOBAL.sw, time);
-  drawFlow(GLOBAL.cmes, GLOBAL.sw, time);
+  drawGEO(time);
+
+  drawFlow(time);
+
 }
 
-function drawGEO(cmes, sw, time){
-  const {ctx,w,h} = setup("geoCanvas");
+function drawGEO(time){
+
+  const {ctx,w,h} =
+    setup("geoCanvas");
+
   ctx.clearRect(0,0,w,h);
 
-  const active = cmes.filter(c => time >= c.activeStart && time <= c.activeEnd);
-  const center = subsolarLongitude(time);
+  const active =
+    GLOBAL.cmes.filter(
+      c=>time>=c.activeStart && time<=c.activeEnd
+    );
+
+  const center =
+    subsolarLongitude(time);
 
   for(let i=0;i<360;i++){
-    const lon = -180 + i;
+
+    const lon = -180+i;
+
     let risk = 0;
 
     for(const c of active){
-      const dt = Math.abs(time - c.arrival.date) / 3600000;
-      const timeWeight = Math.exp(-(dt*dt)/(2*18*18));
 
-      const daysideDist = angDist(lon, center);
-      const compression = Math.exp(-(daysideDist*daysideDist)/(2*55*55));
+      const dt =
+        Math.abs(time-c.arrival.date)/3600000;
 
-      const duskCenter = normalizeLon(center - 90);
-      const duskDist = angDist(lon, duskCenter);
-      const injection = Math.exp(-(duskDist*duskDist)/(2*70*70));
+      const timeWeight =
+        Math.exp(-(dt*dt)/(2*18*18));
 
-      let r = c.impactScore * timeWeight * compression;
+      const compression =
+        Math.exp(
+          -(angDist(lon,center)**2)/(2*55*55)
+        );
 
-      if(sw.clockAngle >= 120 || sw.kp >= 5){
-        r += c.impactScore * sw.clockFactor * 0.45 * timeWeight * injection;
-      }
+      const dusk =
+        Math.exp(
+          -(angDist(
+            lon,
+            normalizeLon(center-90)
+          )**2)/(2*70*70)
+        );
 
-      risk = Math.max(risk, r);
+      let r =
+        c.impactScore *
+        timeWeight *
+        compression;
+
+      if(GLOBAL.sw.clockAngle>=120)
+        r +=
+          c.impactScore *
+          0.45 *
+          dusk;
+
+      risk = Math.max(risk,r);
+
     }
 
-    ctx.fillStyle = riskColor(risk);
-    ctx.fillRect(i*w/360, h*0.22, w/360+1, h*0.28);
+    ctx.fillStyle =
+      riskColor(risk);
+
+    ctx.fillRect(
+      i*w/360,
+      h*0.22,
+      w/360+1,
+      h*0.28
+    );
+
   }
 
   drawGeoAxis(ctx,w,h);
 
-  ctx.fillStyle = "#fff";
-  ctx.font = "13px system-ui";
-  ctx.fillText("予測時刻: " + time.toISOString().slice(0,16).replace("T"," ") + " UTC",12,22);
-  ctx.fillText("影響中CME: " + active.length,12,h*0.62);
-  ctx.fillText("昼側GEO中心: " + center.toFixed(1) + "°",12,h*0.68);
-  ctx.fillText(`Clock=${sw.clockAngle.toFixed(0)}°  By=${sw.by}  Bz=${sw.bz}  Pdyn=${sw.dynamicPressure.toFixed(2)} nPa`,12,h*0.74);
+  document.getElementById("geoInfo").innerHTML =
+    `影響中CME: <b>${active.length}</b><br>`+
+    `Clock angle: <b>${GLOBAL.sw.clockAngle.toFixed(1)}°</b><br>`+
+    `Bz: <b>${GLOBAL.sw.bz}</b> nT`;
 
-  document.getElementById("geoSummary").innerHTML =
-    `右側は予測：スライダー時刻のGEO経度別リスク<br>` +
-    `影響中CME: <b>${active.length}</b><br>` +
-    `昼側圧縮中心: <b>${center.toFixed(1)}°</b><br>` +
-    `Clock angle 120°以上で夕方側注入リスクを強めます。`;
 }
 
-function drawFlow(cmes, sw, time){
-  const box = document.getElementById("flowCanvas");
-  const dpr = window.devicePixelRatio || 1;
-  const rect = box.getBoundingClientRect();
-  box.width = rect.width*dpr;
-  box.height = rect.height*dpr;
-  const ctx = box.getContext("2d");
+function drawFlow(time){
+
+  const c =
+    document.getElementById("flowCanvas");
+
+  const dpr =
+    window.devicePixelRatio||1;
+
+  const rect =
+    c.getBoundingClientRect();
+
+  c.width = rect.width*dpr;
+  c.height = rect.height*dpr;
+
+  const ctx =
+    c.getContext("2d");
+
   ctx.setTransform(dpr,0,0,dpr,0,0);
 
-  const w = rect.width, h = rect.height;
+  const w = rect.width;
+  const h = rect.height;
+
+  const sunX = 70;
+  const earthX = w-80;
+  const y = h/2;
+
   ctx.clearRect(0,0,w,h);
 
-  const sunX = 70, earthX = w - 80, y = h/2;
-  const pathLen = earthX - sunX;
-
-  ctx.strokeStyle = "#ffffff22";
-  ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(sunX,y);
   ctx.lineTo(earthX,y);
+
+  ctx.strokeStyle="#ffffff22";
+  ctx.lineWidth=2;
   ctx.stroke();
 
   ctx.beginPath();
@@ -527,163 +687,259 @@ function drawFlow(cmes, sw, time){
   ctx.fillStyle="#4fc3f7";
   ctx.fill();
 
-  ctx.fillStyle="#fff";
-  ctx.font="12px system-ui";
-  ctx.fillText("Sun",sunX-12,y+48);
-  ctx.fillText("Earth / GEO",earthX-34,y+38);
-  ctx.fillText("太陽→地球 CME/太陽風伝播  現在+" + document.getElementById("timeSlider").value + "h",12,22);
+  GLOBAL.cmes.slice(0,10).forEach(c=>{
 
-  drawSolarWindStream(ctx, sunX, earthX, y, h, sw);
+    const t0 =
+      new Date(c.time21_5);
 
-  cmes.slice(0,10).forEach(c=>{
-    const t0 = parseCactusTime(c.t0);
-    const total = c.arrival.date - t0;
-    const elapsed = time - t0;
-    const frac = Math.max(0, Math.min(1.15, elapsed / total));
+    const total =
+      c.arrival.date - t0;
 
-    if(frac <= 0 || frac > 1.12) return;
+    const elapsed =
+      time - t0;
 
-    const x = sunX + frac * pathLen;
-    const col = riskColor(c.impactScore);
+    const frac =
+      Math.max(
+        0,
+        Math.min(1.15, elapsed/total)
+      );
 
-    ctx.strokeStyle = col;
-    ctx.lineWidth = Math.max(2, Math.min(16, c.da/20));
-    ctx.globalAlpha = 0.75;
+    if(frac<=0 || frac>1.12)
+      return;
+
+    const x =
+      sunX + frac*(earthX-sunX);
+
+    const col =
+      riskColor(c.impactScore);
+
+    ctx.strokeStyle=col;
+    ctx.lineWidth=
+      Math.max(2,c.halfAngle*0.3);
+
+    ctx.globalAlpha=0.7;
+
     ctx.beginPath();
-    ctx.arc(x,y,30 + c.da*0.18, -0.9, 0.9);
+
+    ctx.arc(
+      x,
+      y,
+      25+c.halfAngle*0.6,
+      -0.9,
+      0.9
+    );
+
     ctx.stroke();
-    ctx.globalAlpha = 1;
 
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.arc(x,y,5,0,Math.PI*2);
-    ctx.fill();
+    ctx.globalAlpha=1;
 
     ctx.fillStyle="#fff";
     ctx.font="11px system-ui";
-    ctx.fillText("CME"+c.id+" "+Math.round(frac*100)+"%",x+8,y-26);
+
+    ctx.fillText(
+      `${Math.round(frac*100)}%`,
+      x+8,
+      y-24
+    );
+
   });
 
-  const active = cmes.filter(c => time >= c.activeStart && time <= c.activeEnd);
-  if(active.length){
-    ctx.fillStyle="#ff1744";
-    ctx.font="13px system-ui";
-    ctx.fillText("Impact window active: " + active.length + " CME(s)",earthX-160,26);
-  }
 }
 
-function drawSolarWindStream(ctx, sunX, earthX, y, h, sw){
-  const speedNorm = Math.max(0.2, Math.min(1.2, sw.speed / 600));
-  const n = Math.round(20 * speedNorm);
+function renderSolarWind(sw){
 
-  ctx.strokeStyle = sw.clockAngle >= 135 ? "#ff5252aa" : sw.clockAngle >= 90 ? "#ffd54faa" : "#8bc34aaa";
-  ctx.lineWidth = 1.5;
+  document.getElementById("swInfo").innerHTML =
+    `Solar wind speed: <b>${sw.speed}</b> km/s<br>`+
+    `Density: <b>${sw.density}</b> p/cm³<br>`+
+    `By: <b>${sw.by}</b> nT<br>`+
+    `Bz: <b>${sw.bz}</b> nT<br>`+
+    `Bt: <b>${sw.bt}</b> nT<br>`+
+    `Clock angle: <b>${sw.clockAngle.toFixed(1)}°</b><br>`+
+    `Coupling: <b>${sw.coupling}</b><br>`+
+    `Dynamic Pressure: <b>${sw.dynamicPressure.toFixed(2)}</b> nPa<br>`+
+    `Kp: <b>${sw.kp}</b>`;
 
-  for(let i=0;i<n;i++){
-    const x0 = sunX + 45 + i*(earthX-sunX-90)/n;
-    const yy = y + Math.sin(i*1.7)*35;
-    ctx.beginPath();
-    ctx.moveTo(x0,yy);
-    ctx.lineTo(x0+28*speedNorm, yy);
-    ctx.stroke();
+}
 
-    ctx.beginPath();
-    ctx.moveTo(x0+28*speedNorm, yy);
-    ctx.lineTo(x0+20*speedNorm, yy-4);
-    ctx.lineTo(x0+20*speedNorm, yy+4);
-    ctx.closePath();
-    ctx.fillStyle = ctx.strokeStyle;
-    ctx.fill();
-  }
+function renderTable(cmes){
 
-  ctx.fillStyle="#bbb";
-  ctx.font="11px system-ui";
-  ctx.fillText(`Solar wind V=${sw.speed} km/s / IMF clock=${sw.clockAngle.toFixed(0)}°`,sunX+40,h-18);
+  document.getElementById("table").innerHTML = `
+  <table>
+  <tr>
+  <th>Time</th>
+  <th>Lon</th>
+  <th>Lat</th>
+  <th>Speed</th>
+  <th>HalfAngle</th>
+  <th>Arrival</th>
+  <th>Method</th>
+  <th>Impact</th>
+  </tr>
+
+  ${cmes.map(c=>`
+
+  <tr>
+  <td>${c.time21_5 || "-"}</td>
+  <td>${c.lon}</td>
+  <td>${c.lat}</td>
+  <td>${c.speed}</td>
+  <td>${c.halfAngle}</td>
+  <td>${c.arrival.utc.slice(0,16).replace("T"," ")}</td>
+  <td>${c.arrival.source}</td>
+  <td style="color:${riskColor(c.impactScore)};font-weight:700">
+  ${c.impactScore}
+  </td>
+  </tr>
+
+  `).join("")}
+
+  </table>
+  `;
+
+}
+
+function setup(id){
+
+  const c =
+    document.getElementById(id);
+
+  const dpr =
+    window.devicePixelRatio||1;
+
+  const rect =
+    c.getBoundingClientRect();
+
+  c.width = rect.width*dpr;
+  c.height = rect.height*dpr;
+
+  const ctx =
+    c.getContext("2d");
+
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  return {
+    ctx,
+    w:rect.width,
+    h:rect.height,
+    cx:rect.width/2,
+    cy:rect.height/2,
+    r:Math.min(rect.width,rect.height)*0.38
+  };
+
 }
 
 function drawGeoAxis(ctx,w,h){
-  [-180,-120,-60,0,60,120,180].forEach(lon=>{
-    const x = (lon+180)/360*w;
-    ctx.strokeStyle = "#fff5";
+
+  [-180,-120,-60,0,60,120,180]
+  .forEach(lon=>{
+
+    const x =
+      (lon+180)/360*w;
+
+    ctx.strokeStyle="#fff5";
+
     ctx.beginPath();
     ctx.moveTo(x,h*0.18);
     ctx.lineTo(x,h*0.55);
     ctx.stroke();
 
-    ctx.fillStyle = "#fff";
-    ctx.font = "11px system-ui";
-    ctx.fillText(lon+"°",x+2,h*0.18);
+    ctx.fillStyle="#fff";
+    ctx.font="11px system-ui";
+
+    ctx.fillText(
+      lon+"°",
+      x+2,
+      h*0.18
+    );
+
   });
+
 }
 
-function renderSolarWind(sw){
-  const clockClass = sw.clockAngle >= 150 ? "bad" : sw.clockAngle >= 120 ? "warn" : "ok";
-  const pClass = sw.dynamicPressure >= 8 ? "bad" : sw.dynamicPressure >= 4 ? "warn" : "ok";
-  const kpClass = sw.kp >= 6 ? "bad" : sw.kp >= 5 ? "warn" : "ok";
+function subsolarLongitude(date){
 
-  document.getElementById("windBox").innerHTML =
-    `時刻: <b>${sw.time || "不明"}</b><br>` +
-    `太陽風速度: <b>${sw.speed}</b> km/s / 密度: <b>${sw.density}</b> p/cm³<br>` +
-    `Bt: <b>${sw.bt}</b> nT / By: <b>${sw.by}</b> nT / Bz: <b>${sw.bz}</b> nT<br>` +
-    `IMF Clock Angle: <b class="${clockClass}">${sw.clockAngle.toFixed(1)}°</b>　` +
-    `結合係数: <b class="${clockClass}">${sw.clockFactor.toFixed(2)}</b><br>` +
-    `簡易Coupling: <b>${sw.coupling}</b><br>` +
-    `動圧: <b class="${pClass}">${sw.dynamicPressure.toFixed(2)}</b> nPa / ` +
-    `Kp: <b class="${kpClass}">${sw.kp}</b><br>` +
-    `目安: 0°=北向き寄り、90°=横向き、180°=南向き寄り。120°以上から警戒。`;
+  const h =
+    date.getUTCHours() +
+    date.getUTCMinutes()/60;
+
+  let lon =
+    180 - h*15;
+
+  while(lon>180) lon-=360;
+  while(lon<-180) lon+=360;
+
+  return lon;
+
 }
 
-function renderTable(cmes){
-  document.getElementById("table").innerHTML = `
-  <table>
-    <tr>
-      <th>CME</th><th>t0</th><th>PA</th><th>幅</th><th>速度</th><th>Halo</th>
-      <th>Impact</th><th>到達予想</th><th>昼側GEO</th><th>継続</th>
-    </tr>
-    ${cmes.map(c=>`
-      <tr>
-        <td>${c.id}</td>
-        <td>${c.t0}</td>
-        <td>${c.pa}</td>
-        <td>${c.da}</td>
-        <td>${c.v}</td>
-        <td>${c.halo || "-"}</td>
-        <td style="color:${riskColor(c.impactScore)};font-weight:700">${c.impactScore}</td>
-        <td>${c.arrival.utc.slice(0,16).replace("T"," ")}</td>
-        <td>${c.arrival.subsolarLon.toFixed(1)}°</td>
-        <td>${c.durationHours}h</td>
-      </tr>
-    `).join("")}
-  </table>`;
+function normalizeLon(lon){
+
+  while(lon>180) lon-=360;
+  while(lon<-180) lon+=360;
+
+  return lon;
+
+}
+
+function angDist(a,b){
+
+  return Math.abs(
+    ((a-b+180)%360+360)%360-180
+  );
+
+}
+
+function riskColor(s){
+
+  if(s>=75) return "#ff1744";
+  if(s>=55) return "#ff9100";
+  if(s>=30) return "#ffee58";
+
+  return "#8bc34a";
+
 }
 
 function playTimeline(){
+
   stopTimeline();
-  GLOBAL.timer = setInterval(()=>{
-    const s = document.getElementById("timeSlider");
-    let v = Number(s.value) + 1;
-    if(v > 168) v = 0;
-    s.value = v;
-    updateTimeView();
-  }, 300);
+
+  GLOBAL.timer =
+    setInterval(()=>{
+
+      const s =
+        document.getElementById("timeSlider");
+
+      let v =
+        Number(s.value)+1;
+
+      if(v>168) v=0;
+
+      s.value=v;
+
+      updateTimeline();
+
+    },300);
+
 }
 
 function stopTimeline(){
-  if(GLOBAL.timer) clearInterval(GLOBAL.timer);
-  GLOBAL.timer = null;
+
+  if(GLOBAL.timer)
+    clearInterval(GLOBAL.timer);
+
+  GLOBAL.timer=null;
+
 }
 
-function angDist(a,b){return Math.abs(((a-b+180)%360+360)%360-180);}
-function normalizeLon(lon){while(lon>180)lon-=360;while(lon<-180)lon+=360;return lon;}
+function raw(t){
 
-function riskColor(s){
-  if(s >= 75) return "#ff1744";
-  if(s >= 55) return "#ff9100";
-  if(s >= 30) return "#ffee58";
-  return "#8bc34a";
+  document.getElementById("raw").textContent=t;
+
 }
 
 loadAll();
+
 </script>
+
 </body>
 </html>
