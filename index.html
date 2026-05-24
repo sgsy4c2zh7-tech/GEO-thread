@@ -3,195 +3,66 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Space Weather Satellite Hazard System</title>
-
+<title>CME Satellite Hazard Robust</title>
 <style>
-body{
-  margin:0;
-  background:#070b12;
-  color:#eee;
-  font-family:system-ui,sans-serif;
-}
-
-header{
-  background:#101826;
-  border-bottom:1px solid #333;
-  padding:16px;
-}
-
-button{
-  padding:10px 14px;
-  margin:4px;
-  border:0;
-  border-radius:8px;
-  cursor:pointer;
-  font-weight:700;
-}
-
-main{
-  padding:16px;
-}
-
-.grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(420px,1fr));
-  gap:16px;
-}
-
-.card{
-  background:#141b27;
-  border:1px solid #333;
-  border-radius:14px;
-  padding:14px;
-}
-
-.box{
-  position:relative;
-  width:100%;
-  aspect-ratio:1/1;
-  background:#000;
-  border-radius:12px;
-  overflow:hidden;
-}
-
-.widebox{
-  position:relative;
-  width:100%;
-  height:320px;
-  background:#000;
-  border-radius:12px;
-  overflow:hidden;
-}
-
-canvas{
-  position:absolute;
-  inset:0;
-  width:100%;
-  height:100%;
-}
-
-input[type=range]{
-  width:100%;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-  font-size:13px;
-}
-
-td,th{
-  border-bottom:1px solid #333;
-  padding:6px;
-  text-align:left;
-}
-
-.small{
-  font-size:13px;
-  color:#bbb;
-  line-height:1.5;
-}
-
-pre{
-  background:#050608;
-  border-radius:10px;
-  padding:10px;
-  white-space:pre-wrap;
-  max-height:300px;
-  overflow:auto;
-}
-
-.phase{
-  margin-top:8px;
-  padding:10px;
-  border-radius:10px;
-  background:#0d1320;
-}
-
-.phaseTitle{
-  font-size:15px;
-  font-weight:700;
-}
-
-.level{
-  font-weight:700;
-}
-
-.green{color:#8bc34a}
-.yellow{color:#ffee58}
-.orange{color:#ff9800}
-.red{color:#ff5252}
-.purple{color:#d500f9}
-
-.bar{
-  height:18px;
-  border-radius:999px;
-  overflow:hidden;
-  background:#222;
-  margin-top:8px;
-}
-
-.fill{
-  height:100%;
-}
+body{margin:0;background:#070b12;color:#eee;font-family:system-ui,sans-serif}
+header{background:#101826;border-bottom:1px solid #333;padding:16px}
+button,input{margin:4px}
+button{padding:10px 14px;border:0;border-radius:8px;font-weight:700;cursor:pointer}
+main{padding:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px}
+.card{background:#141b27;border:1px solid #333;border-radius:14px;padding:14px}
+.box{position:relative;width:100%;aspect-ratio:1/1;background:#000;border-radius:12px;overflow:hidden}
+.widebox{position:relative;width:100%;height:320px;background:#000;border-radius:12px;overflow:hidden}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+input[type=range]{width:100%}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{border-bottom:1px solid #333;padding:6px;text-align:left}
+pre{background:#050608;border-radius:10px;padding:10px;white-space:pre-wrap;max-height:320px;overflow:auto}
+.small{font-size:13px;color:#bbb;line-height:1.5}
+.phase{margin-top:8px;padding:10px;border-radius:10px;background:#0d1320}
+.bar{height:16px;border-radius:999px;background:#222;overflow:hidden;margin-top:6px}
+.fill{height:100%}
 </style>
 </head>
 
 <body>
-
 <header>
-<h2>Satellite Hazard Assessment System</h2>
-
-<button onclick="loadAll()">DONKI + NOAA取得</button>
+<h2>CME → Satellite Hazard Assessment Robust</h2>
+<div>
+NASA API Key:
+<input id="apiKey" value="DEMO_KEY" style="width:220px">
+<button onclick="loadAll()">取得・更新</button>
 <button onclick="playTimeline()">▶ 再生</button>
 <button onclick="stopTimeline()">停止</button>
-
+</div>
 </header>
 
 <main>
 
 <div class="grid">
-
 <section class="card">
 <h3>① CME Source on Solar Disk</h3>
-<div class="box">
-<canvas id="sunCanvas"></canvas>
-</div>
-<div id="sunSummary" class="small"></div>
+<div class="box"><canvas id="sunCanvas"></canvas></div>
+<div id="sunSummary" class="small">未取得</div>
 </section>
 
 <section class="card">
 <h3>② Satellite Hazard Assessment</h3>
-
-<div id="hazardPanel"></div>
-
+<div id="hazardPanel" class="small">未取得</div>
 </section>
-
 </div>
 
 <section class="card" style="margin-top:16px">
 <h3>③ CME Propagation / Earth Arrival</h3>
-
-<input
-id="timeSlider"
-type="range"
-min="0"
-max="168"
-value="0"
-step="1"
-oninput="updateTimeline()">
-
+<input id="timeSlider" type="range" min="0" max="168" value="0" step="1" oninput="updateTimeline()">
 <div id="timeLabel" class="small"></div>
-
-<div class="widebox">
-<canvas id="flowCanvas"></canvas>
-</div>
-
+<div class="widebox"><canvas id="flowCanvas"></canvas></div>
 </section>
 
 <section class="card" style="margin-top:16px">
-<h3>NOAA Real-time Solar Wind</h3>
-<div id="windBox" class="small"></div>
+<h3>NOAA / DONKI Status</h3>
+<div id="statusBox" class="small"></div>
 </section>
 
 <section class="card" style="margin-top:16px">
@@ -200,22 +71,23 @@ oninput="updateTimeline()">
 </section>
 
 <section class="card" style="margin-top:16px">
-<h3>Status / Raw</h3>
+<h3>Raw / Debug</h3>
 <pre id="raw"></pre>
 </section>
 
 </main>
 
 <script>
-const NASA_KEY = "DEMO_KEY";
-
-const DONKI =
-  "https://api.nasa.gov/DONKI/CMEAnalysis";
+const DONKI_CME_ANALYSIS = "https://api.nasa.gov/DONKI/CMEAnalysis";
+const DONKI_CME = "https://api.nasa.gov/DONKI/CME";
 
 const NOAA = {
-  wind:"https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json",
-  mag:"https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json",
-  kp:"https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json",
+  windNew:"https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json",
+  magNew:"https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json",
+  windOld:"https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json",
+  magOld:"https://services.swpc.noaa.gov/products/solar-wind/mag-1-day.json",
+  kp1:"https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json",
+  kp2:"https://services.swpc.noaa.gov/products/noaa-estimated-planetary-k-index-1-minute.json",
   proton:"https://services.swpc.noaa.gov/json/goes/primary/integral-protons-6-hour.json"
 };
 
@@ -224,1090 +96,403 @@ const SOLAR_ROTATION = 13.2 / 24;
 
 let GLOBAL = {
   cmes: [],
-  sw: {},
-  proton:{},
+  sw: defaultSW(),
+  proton: {p10:0,time:""},
   startTime:new Date(),
-  timer:null
+  timer:null,
+  status:{}
 };
 
-function raw(x){
-  document.getElementById("raw").textContent = x;
-}
+function raw(x){document.getElementById("raw").textContent=x;}
 
 async function loadAll(){
-
   raw("Loading...");
+  const apiKey = document.getElementById("apiKey").value.trim() || "DEMO_KEY";
 
-  try{
+  const now = new Date();
+  const start = new Date(now.getTime()-7*86400000).toISOString().slice(0,10);
+  const end = now.toISOString().slice(0,10);
 
-    const now = new Date();
+  const urls = {
+    donkiAnalysis:`${DONKI_CME_ANALYSIS}?startDate=${start}&endDate=${end}&mostAccurateOnly=true&speed=300&api_key=${apiKey}`,
+    donkiCME:`${DONKI_CME}?startDate=${start}&endDate=${end}&api_key=${apiKey}`
+  };
 
-    const start =
-      new Date(now.getTime()-7*86400000)
-      .toISOString()
-      .slice(0,10);
+  const results = await Promise.allSettled([
+    fetchJson(urls.donkiAnalysis),
+    fetchJson(urls.donkiCME),
+    fetchJsonAny([NOAA.windNew, NOAA.windOld]),
+    fetchJsonAny([NOAA.magNew, NOAA.magOld]),
+    fetchJsonAny([NOAA.kp1, NOAA.kp2]),
+    fetchJson(NOAA.proton)
+  ]);
 
-    const end =
-      now.toISOString().slice(0,10);
+  const [donkiAnalysisR, donkiCMER, windR, magR, kpR, protonR] = results;
 
-    const donkiUrl =
-      `${DONKI}?startDate=${start}&endDate=${end}&mostAccurateOnly=true&speed=300&api_key=${NASA_KEY}`;
+  const donkiAnalysis = valueOrEmpty(donkiAnalysisR);
+  const donkiCME = valueOrEmpty(donkiCMER);
+  const wind = valueOrEmpty(windR);
+  const mag = valueOrEmpty(magR);
+  const kp = valueOrEmpty(kpR);
+  const protonRaw = valueOrEmpty(protonR);
 
-    const [cmeRaw,windRaw,magRaw,kpRaw,protonRaw] =
-      await Promise.all([
-        fetchJSON(donkiUrl),
-        fetchJSON(NOAA.wind).catch(()=>[]),
-        fetchJSON(NOAA.mag).catch(()=>[]),
-        fetchJSON(NOAA.kp).catch(()=>[]),
-        fetchJSON(NOAA.proton).catch(()=>[])
-      ]);
+  const sw = parseSolarWind(wind, mag, kp);
+  const proton = parseProtons(protonRaw);
 
-    const sw =
-      parseSolarWind(windRaw,magRaw,kpRaw);
-
-    const proton =
-      parseProtons(protonRaw);
-
-    const cmes =
-      cmeRaw
-      .map(c=>parseCME(c,sw))
-      .filter(Boolean)
-      .sort((a,b)=>b.arrivalScore-a.arrivalScore);
-
-    GLOBAL.cmes = cmes;
-    GLOBAL.sw = sw;
-    GLOBAL.proton = proton;
-    GLOBAL.startTime = new Date();
-
-    renderWind(sw,proton);
-    renderTable(cmes);
-
-    updateTimeline();
-
-    raw(JSON.stringify({
-      cmes:cmes.slice(0,20),
-      sw,
-      proton
-    },null,2));
-
-  }catch(e){
-    raw("ERROR: " + e.message);
+  let cmes = [];
+  if(Array.isArray(donkiAnalysis) && donkiAnalysis.length){
+    cmes = donkiAnalysis.map(c=>parseCMEAnalysis(c, sw)).filter(Boolean);
   }
+
+  if(!cmes.length && Array.isArray(donkiCME) && donkiCME.length){
+    cmes = parseFromDONKICME(donkiCME, sw);
+  }
+
+  cmes.sort((a,b)=>b.arrivalScore-a.arrivalScore);
+
+  GLOBAL.cmes = cmes;
+  GLOBAL.sw = sw;
+  GLOBAL.proton = proton;
+  GLOBAL.startTime = new Date();
+  GLOBAL.status = {
+    DONKI_CMEAnalysis: statusText(donkiAnalysisR, donkiAnalysis),
+    DONKI_CME: statusText(donkiCMER, donkiCME),
+    NOAA_wind: statusText(windR, wind),
+    NOAA_mag: statusText(magR, mag),
+    NOAA_kp: statusText(kpR, kp),
+    NOAA_proton: statusText(protonR, protonRaw)
+  };
+
+  renderStatus();
+  renderTable(cmes);
+  updateTimeline();
+
+  raw(JSON.stringify({
+    status:GLOBAL.status,
+    cmeCount:cmes.length,
+    solarWind:sw,
+    proton,
+    topCmes:cmes.slice(0,20)
+  },null,2));
 }
 
-async function fetchJSON(url){
-
-  const sep =
-    url.includes("?") ? "&" : "?";
-
-  const r =
-    await fetch(url + sep + "t=" + Date.now());
-
-  if(!r.ok){
-    throw new Error("HTTP " + r.status);
-  }
-
+async function fetchJson(url){
+  const sep = url.includes("?") ? "&" : "?";
+  const r = await fetch(url + sep + "t=" + Date.now());
+  if(!r.ok) throw new Error("HTTP " + r.status + " " + url);
   return await r.json();
 }
 
-function parseSolarWind(wind,mag,kp){
+async function fetchJsonAny(urls){
+  let lastErr = "";
+  for(const url of urls){
+    try{return await fetchJson(url);}
+    catch(e){lastErr = e.message;}
+  }
+  throw new Error(lastErr);
+}
 
+function valueOrEmpty(result){
+  return result.status === "fulfilled" ? result.value : [];
+}
+
+function statusText(result, data){
+  if(result.status !== "fulfilled") return "FAILED: " + result.reason.message;
+  if(Array.isArray(data)) return "OK: " + data.length + " records";
+  return "OK";
+}
+
+function defaultSW(){
+  return {time:"fallback",speed:400,density:0,by:0,bz:0,bt:0,kp:0,dynamicPressure:0,clockAngle:0};
+}
+
+function parseSolarWind(wind,mag,kp){
   const w = latest(wind);
   const b = latest(mag);
   const k = latest(kp);
 
-  const speed =
-    pick(w,["speed","proton_speed","bulk_speed",2]) || 400;
+  const speed = pick(w,["speed","proton_speed","bulk_speed",2]) || 400;
+  const density = pick(w,["density","proton_density",1]);
+  const by = pick(b,["by_gsm","by",2]);
+  const bz = pick(b,["bz_gsm","bz",3]);
+  const bt = pick(b,["bt","total_field",6]);
+  const kpVal = pick(k,["kp_index","kp","estimated_kp","Kp",1]);
 
-  const density =
-    pick(w,["density","proton_density",1]);
-
-  const by =
-    pick(b,["by_gsm","by",2]);
-
-  const bz =
-    pick(b,["bz_gsm","bz",3]);
-
-  const bt =
-    pick(b,["bt","total_field",6]);
-
-  const kpVal =
-    pick(k,["kp_index","kp","estimated_kp",1]);
-
-  const pdyn =
-    density && speed
-      ? 1.6726e-6 * density * speed * speed
-      : 0;
-
-  const clock =
-    calcClockAngle(by,bz);
+  const pdyn = density && speed ? 1.6726e-6 * density * speed * speed : 0;
+  const clock = Math.max(0,Math.min(180,Math.atan2(Math.abs(by),bz)*180/Math.PI));
 
   return {
-    time:getTime(w)||"",
-    speed,
-    density,
-    by,
-    bz,
-    bt,
-    kp:kpVal,
+    time:getTime(w)||getTime(b)||getTime(k)||"",
+    speed,density,by,bz,bt,kp:kpVal,
     dynamicPressure:pdyn,
     clockAngle:clock
   };
 }
 
 function parseProtons(arr){
-
-  const p10 =
-    latestEnergy(arr,">=10 MeV");
-
-  return {
-    p10:p10?.flux || 0,
-    time:p10?.time_tag || ""
-  };
+  const p10 = latestEnergy(arr,">=10 MeV");
+  return {p10:p10?.flux || 0,time:p10?.time_tag || ""};
 }
 
 function latestEnergy(arr,e){
-
   if(!Array.isArray(arr)) return null;
-
   for(let i=arr.length-1;i>=0;i--){
-
     const x = arr[i];
-
-    if(!x) continue;
-
-    if(String(x.energy||"").includes(e)){
-      return x;
-    }
+    if(String(x?.energy || "").includes(e)) return x;
   }
-
   return null;
 }
 
 function latest(arr){
-
   if(!Array.isArray(arr)) return {};
-
   for(let i=arr.length-1;i>=0;i--){
-
-    const r = arr[i];
-
+    const r=arr[i];
     if(Array.isArray(r)){
-
-      if(String(r[0]).includes("time")) continue;
-
+      if(String(r[0]).toLowerCase().includes("time")) continue;
       return r;
     }
-
-    if(r && typeof r==="object"){
-      return r;
-    }
+    if(r && typeof r==="object") return r;
   }
-
   return {};
 }
 
 function pick(obj,names){
-
   for(const n of names){
-
     if(typeof n==="number" && Array.isArray(obj)){
-
-      const v = Number(obj[n]);
-
-      if(Number.isFinite(v)) return v;
+      const v=Number(obj[n]); if(Number.isFinite(v)) return v;
     }
-
-    if(typeof n==="string" && obj[n]!==undefined){
-
-      const v = Number(obj[n]);
-
-      if(Number.isFinite(v)) return v;
+    if(typeof n==="string" && obj && obj[n]!==undefined){
+      const v=Number(obj[n]); if(Number.isFinite(v)) return v;
     }
   }
-
   return 0;
 }
 
 function getTime(obj){
-
-  if(Array.isArray(obj)){
-    return obj[0] || "";
-  }
-
-  return obj.time_tag || obj.time || "";
+  if(Array.isArray(obj)) return obj[0] || "";
+  if(!obj) return "";
+  return obj.time_tag || obj.time || obj.observation_time || "";
 }
 
-function calcClockAngle(by,bz){
+function parseCMEAnalysis(c,sw){
+  const lon=Number(c.longitude), lat=Number(c.latitude), speed=Number(c.speed), half=Number(c.halfAngle||20);
+  if(!Number.isFinite(lon)||!Number.isFinite(lat)||!Number.isFinite(speed)) return null;
 
-  return Math.max(
-    0,
-    Math.min(
-      180,
-      Math.atan2(Math.abs(by),bz)*180/Math.PI
-    )
-  );
-}
-
-function parseCME(c,sw){
-
-  if(!c.speed) return null;
-
-  const lon = Number(c.longitude);
-  const lat = Number(c.latitude);
-  const speed = Number(c.speed);
-  const half = Number(c.halfAngle || 20);
-
-  if(!Number.isFinite(lon)) return null;
-
-  const t0 =
-    c.time21_5
-      ? new Date(c.time21_5)
-      : new Date(c.activityStartTime || Date.now());
-
-  const arrival =
-    computeArrival(c,sw);
-
-  const earthness =
-    earthDirected(lon,lat,half);
-
-  const speedScore =
-    speedRisk(speed);
-
-  const widthScore =
-    Math.min(25,half*0.45);
-
-  const arrivalScore =
-    Math.min(
-      100,
-      Math.round(
-        earthness +
-        speedScore +
-        widthScore
-      )
-    );
+  const t0 = c.time21_5 ? new Date(c.time21_5) : new Date(c.activityStartTime || Date.now());
+  const arrival = computeArrival(c, sw);
+  const arrivalScore = scoreCME(lon,lat,speed,half);
 
   return {
     id:c.activityID || "CME",
-    lon,
-    lat,
-    speed,
-    halfAngle:half,
-    t0,
-    arrival,
-    arrivalScore,
-    activeStart:
-      new Date(arrival.date.getTime()-6*3600*1000),
-
-    activeEnd:
-      new Date(arrival.date.getTime()+36*3600*1000)
+    lon,lat,speed,halfAngle:half,t0,
+    arrival,arrivalScore,
+    activeStart:new Date(arrival.date.getTime()-6*3600*1000),
+    activeEnd:new Date(arrival.date.getTime()+36*3600*1000),
+    sourceType:"CMEAnalysis"
   };
 }
 
-function earthDirected(lon,lat,half){
-
-  const d =
-    Math.sqrt(lon*lon + lat*lat);
-
-  if(d <= half) return 45;
-  if(d <= half+20) return 30;
-  if(d <= half+40) return 18;
-  return 5;
+function parseFromDONKICME(list,sw){
+  const out=[];
+  for(const c of list){
+    const analyses = c.cmeAnalyses || [];
+    for(const a of analyses){
+      const merged = {...a, activityID:c.activityID, activityStartTime:c.startTime};
+      const item = parseCMEAnalysis(merged, sw);
+      if(item) out.push(item);
+    }
+  }
+  return out;
 }
 
-function speedRisk(v){
-
-  if(v>=2000) return 30;
-  if(v>=1500) return 24;
-  if(v>=1000) return 16;
-  if(v>=700) return 10;
-  return 4;
+function scoreCME(lon,lat,speed,half){
+  const d=Math.sqrt(lon*lon+lat*lat);
+  const earth = d<=half ? 45 : d<=half+20 ? 30 : d<=half+40 ? 18 : 5;
+  const sp = speed>=2000?30:speed>=1500?24:speed>=1000?16:speed>=700?10:4;
+  const wd = Math.min(25,half*0.45);
+  return Math.min(100,Math.round(earth+sp+wd));
 }
 
 function computeArrival(c,sw){
-
-  const enlil =
-    bestEnlil(c);
-
-  if(enlil){
-
-    const d =
-      new Date(enlil.estimatedShockArrivalTime);
-
-    return {
-      source:"ENLIL",
-      date:d,
-      utc:d.toISOString()
-    };
+  const enlil = bestEnlil(c);
+  if(enlil?.estimatedShockArrivalTime){
+    const d=new Date(enlil.estimatedShockArrivalTime);
+    return {source:"ENLIL",date:d,utc:d.toISOString()};
   }
 
-  const t0 =
-    c.time21_5
-      ? new Date(c.time21_5)
-      : new Date(c.activityStartTime);
-
-  const bg =
-    sw.speed || 400;
-
-  let v =
-    Number(c.speed);
-
-  if(v > bg){
-    v = bg + (v-bg)*0.62;
-  }
-
-  if(v < 320) v = 320;
-
-  const hours =
-    AU_KM / v / 3600;
-
-  const d =
-    new Date(t0.getTime()+hours*3600*1000);
-
-  return {
-    source:"DBM-lite",
-    date:d,
-    utc:d.toISOString()
-  };
+  const t0 = c.time21_5 ? new Date(c.time21_5) : new Date(c.activityStartTime || Date.now());
+  const bg = sw.speed || 400;
+  let v = Number(c.speed);
+  if(v>bg) v = bg+(v-bg)*0.62;
+  if(v<320) v=320;
+  const hours = AU_KM/v/3600;
+  const d = new Date(t0.getTime()+hours*3600*1000);
+  return {source:"DBM-lite",date:d,utc:d.toISOString()};
 }
 
 function bestEnlil(c){
-
-  if(!c.enlilList) return null;
-
-  const valid =
-    c.enlilList.filter(
-      x=>x && x.estimatedShockArrivalTime
-    );
-
-  return valid[0] || null;
+  if(!Array.isArray(c.enlilList)) return null;
+  return c.enlilList.filter(x=>x?.estimatedShockArrivalTime)[0] || null;
 }
 
 function updateTimeline(){
-
-  const h =
-    Number(
-      document.getElementById("timeSlider").value
-    );
-
-  const t =
-    new Date(
-      GLOBAL.startTime.getTime()+h*3600*1000
-    );
-
+  const h=Number(document.getElementById("timeSlider").value);
+  const t=new Date(GLOBAL.startTime.getTime()+h*3600*1000);
   document.getElementById("timeLabel").innerHTML =
-    `<b>${t.toISOString().slice(0,16).replace("T"," ")}</b> UTC`;
-
+    `<b>${t.toISOString().slice(0,16).replace("T"," ")} UTC</b> / 現在+${h}h`;
   drawSun(GLOBAL.cmes,t);
   drawFlow(GLOBAL.cmes,t);
-  renderHazardPanel(t);
+  renderHazard(t);
 }
 
 function drawSun(cmes,time){
-
-  const {ctx,w,h,cx,cy,r} =
-    setup("sunCanvas");
-
+  const {ctx,w,h,cx,cy,r}=setup("sunCanvas");
   ctx.clearRect(0,0,w,h);
+  const g=ctx.createRadialGradient(cx-r*.25,cy-r*.25,r*.1,cx,cy,r);
+  g.addColorStop(0,"#fff59d");g.addColorStop(.55,"#ffb300");g.addColorStop(1,"#e65100");
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+  ctx.strokeStyle="#fff5";ctx.stroke();
 
-  const g =
-    ctx.createRadialGradient(
-      cx-r*0.25,
-      cy-r*0.25,
-      r*0.1,
-      cx,
-      cy,
-      r
-    );
-
-  g.addColorStop(0,"#fff59d");
-  g.addColorStop(0.55,"#ffb300");
-  g.addColorStop(1,"#e65100");
-
-  ctx.beginPath();
-  ctx.arc(cx,cy,r,0,Math.PI*2);
-  ctx.fillStyle=g;
-  ctx.fill();
-
-  ctx.strokeStyle="#fff5";
-  ctx.stroke();
-
-  drawGrid(ctx,cx,cy,r);
-
-  let visible = 0;
-
+  let visible=0;
   cmes.slice(0,40).forEach(c=>{
-
-    const lon =
-      rotateLon(c.lon,c.t0,time);
-
-    const p =
-      ortho(c.lat,lon);
-
+    const lon=normalizeLon(c.lon + SOLAR_ROTATION*((time-c.t0)/3600000));
+    const p=ortho(c.lat,lon);
     if(!p.visible) return;
-
     visible++;
-
-    const x =
-      cx + p.x*r;
-
-    const y =
-      cy + p.y*r;
-
-    const col =
-      riskColor(c.arrivalScore);
-
-    const size =
-      Math.max(
-        5,
-        Math.min(30,c.halfAngle/3)
-      );
-
-    ctx.beginPath();
-    ctx.arc(x,y,size+5,0,Math.PI*2);
-    ctx.fillStyle=col+"55";
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(x,y,size,0,Math.PI*2);
-    ctx.fillStyle=col;
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(
-      x,
-      y,
-      size+c.halfAngle*0.7,
-      0,
-      Math.PI*2
-    );
-
-    ctx.strokeStyle=col+"88";
-    ctx.lineWidth=2;
-    ctx.stroke();
-
-    ctx.fillStyle="#fff";
-    ctx.font="11px system-ui";
-    ctx.fillText(shortId(c.id),x+size+5,y);
+    const x=cx+p.x*r,y=cy+p.y*r,col=riskColor(c.arrivalScore);
+    const size=Math.max(5,Math.min(30,c.halfAngle/3));
+    ctx.beginPath();ctx.arc(x,y,size+5,0,Math.PI*2);ctx.fillStyle=col+"55";ctx.fill();
+    ctx.beginPath();ctx.arc(x,y,size,0,Math.PI*2);ctx.fillStyle=col;ctx.fill();
+    ctx.fillStyle="#fff";ctx.font="11px system-ui";ctx.fillText(shortId(c.id),x+size+6,y);
   });
 
   document.getElementById("sunSummary").innerHTML =
-    `Visible CME sources: <b>${visible}</b><br>`+
-    `Color = Earth arrival risk`;
+    `Visible CME sources: <b>${visible}</b><br>CME records: <b>${cmes.length}</b><br>Color = Earth arrival score`;
 }
 
 function drawFlow(cmes,time){
-
-  const {ctx,w,h} =
-    setupWide("flowCanvas");
-
+  const {ctx,w,h}=setupWide("flowCanvas");
   ctx.clearRect(0,0,w,h);
+  const sx=70,ex=w-80,y=h/2,len=ex-sx;
 
-  const sx=70;
-  const ex=w-80;
-  const y=h/2;
-  const len=ex-sx;
+  ctx.strokeStyle="#ffffff22";ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(sx,y);ctx.lineTo(ex,y);ctx.stroke();
+  ctx.beginPath();ctx.arc(sx,y,28,0,Math.PI*2);ctx.fillStyle="#ffb300";ctx.fill();
+  ctx.beginPath();ctx.arc(ex,y,14,0,Math.PI*2);ctx.fillStyle="#4fc3f7";ctx.fill();
 
-  ctx.strokeStyle="#ffffff22";
-  ctx.lineWidth=2;
-
-  ctx.beginPath();
-  ctx.moveTo(sx,y);
-  ctx.lineTo(ex,y);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(sx,y,28,0,Math.PI*2);
-  ctx.fillStyle="#ffb300";
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.arc(ex,y,14,0,Math.PI*2);
-  ctx.fillStyle="#4fc3f7";
-  ctx.fill();
-
-  ctx.fillStyle="#fff";
-  ctx.font="12px system-ui";
-
-  ctx.fillText("Sun",sx-10,y+46);
-  ctx.fillText("Earth",ex-20,y+36);
-
-  ctx.fillText(
-    "CME propagation to Earth",
-    12,
-    24
-  );
+  ctx.fillStyle="#fff";ctx.font="12px system-ui";
+  ctx.fillText("Sun",sx-10,y+45);ctx.fillText("Earth",ex-20,y+35);
+  ctx.fillText("CME propagation to Earth",12,24);
 
   cmes.slice(0,15).forEach((c,idx)=>{
-
-    const total =
-      c.arrival.date - c.t0;
-
-    const elapsed =
-      time - c.t0;
-
+    const total=c.arrival.date-c.t0, elapsed=time-c.t0;
     if(total<=0) return;
-
-    const frac =
-      elapsed / total;
-
-    if(frac < -0.05 || frac > 1.2){
-      return;
-    }
-
-    const x =
-      sx + Math.max(0,Math.min(1.1,frac))*len;
-
-    const lane =
-      y - 80 + (idx%7)*26;
-
-    const col =
-      riskColor(c.arrivalScore);
-
-    ctx.strokeStyle=col;
-    ctx.lineWidth=
-      Math.max(
-        2,
-        Math.min(18,c.halfAngle/4)
-      );
-
-    ctx.globalAlpha=0.75;
-
-    ctx.beginPath();
-
-    ctx.arc(
-      x,
-      lane,
-      20 + c.halfAngle*0.7,
-      -0.9,
-      0.9
-    );
-
-    ctx.stroke();
-
-    ctx.globalAlpha=1;
-
-    ctx.fillStyle=col;
-
-    ctx.beginPath();
-    ctx.arc(x,lane,5,0,Math.PI*2);
-    ctx.fill();
-
-    ctx.fillStyle="#fff";
-    ctx.font="11px system-ui";
-
-    const pct =
-      Math.round(frac*100);
-
-    ctx.fillText(
-      `${shortId(c.id)} ${pct}%`,
-      x+8,
-      lane-8
-    );
-
-    if(Math.abs(frac-1)<0.05){
-
-      ctx.fillStyle="#ff1744";
-
-      ctx.fillText(
-        "ARRIVAL",
-        ex-60,
-        lane-8
-      );
-    }
+    const frac=elapsed/total;
+    if(frac<-0.05||frac>1.2) return;
+    const x=sx+Math.max(0,Math.min(1.1,frac))*len;
+    const lane=y-80+(idx%7)*26, col=riskColor(c.arrivalScore);
+    ctx.strokeStyle=col;ctx.lineWidth=Math.max(2,Math.min(18,c.halfAngle/4));ctx.globalAlpha=.75;
+    ctx.beginPath();ctx.arc(x,lane,20+c.halfAngle*.7,-.9,.9);ctx.stroke();ctx.globalAlpha=1;
+    ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,lane,5,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="#fff";ctx.font="11px system-ui";ctx.fillText(`${shortId(c.id)} ${Math.round(frac*100)}%`,x+8,lane-8);
   });
 }
 
-function renderHazardPanel(time){
-
-  const active =
-    GLOBAL.cmes
-    .filter(c=>
-      time >= c.activeStart &&
-      time <= c.activeEnd
-    )
-    .sort((a,b)=>b.arrivalScore-a.arrivalScore);
-
-  const top =
-    active[0];
+function renderHazard(time){
+  const active = GLOBAL.cmes.filter(c=>time>=c.activeStart && time<=c.activeEnd).sort((a,b)=>b.arrivalScore-a.arrivalScore);
+  const top=active[0];
 
   if(!top){
-
-    document.getElementById("hazardPanel").innerHTML =
-      `<div class="phase">
-      <div class="phaseTitle green">
-      🟢 Quiet
-      </div>
-      No major CME hazard window active.
-      </div>`;
-
+    document.getElementById("hazardPanel").innerHTML = `
+      <div class="phase"><b style="color:#8bc34a">🟢 Quiet</b><br>No active CME hazard window.</div>`;
     return;
   }
 
-  const dt =
-    (time - top.arrival.date)/3600000;
+  const dt=(time-top.arrival.date)/3600000;
+  const phase = dt<0 ? "🟡 CME Shock Approaching" :
+                dt<3 ? "🟠 Magnetosphere Compression" :
+                dt<12 ? "🟠 Surface Charging Risk" : "🔴 Deep Charging Risk";
 
-  let phase = "";
-  let desc = "";
+  const seu = GLOBAL.proton.p10>=10 ? 80 : top.arrivalScore*0.5;
+  const surface = top.arrivalScore + GLOBAL.sw.dynamicPressure*2;
+  const deep = dt>12 ? top.arrivalScore+20 : top.arrivalScore*0.5;
+  const gnss = GLOBAL.sw.kp*12;
+  const drag = GLOBAL.sw.kp*8;
 
-  if(dt < 0){
-
-    phase = "🟡 CME Shock Approaching";
-
-    desc =
-      "Solar wind compression likely near arrival.";
-  }
-
-  else if(dt < 3){
-
-    phase = "🟠 Magnetosphere Compression";
-
-    desc =
-      "Dynamic pressure increase and GEO compression possible.";
-  }
-
-  else if(dt < 12){
-
-    phase = "🟠 Surface Charging Risk";
-
-    desc =
-      "Enhanced electron environment may increase spacecraft surface charging.";
-  }
-
-  else{
-
-    phase = "🔴 Deep Charging Risk";
-
-    desc =
-      "Relativistic electron enhancement may increase internal charging risk.";
-  }
-
-  const seu =
-    riskLevel(
-      GLOBAL.proton.p10 >= 10
-        ? 80
-        : top.arrivalScore*0.5
-    );
-
-  const surface =
-    riskLevel(
-      top.arrivalScore +
-      GLOBAL.sw.dynamicPressure*2
-    );
-
-  const deep =
-    riskLevel(
-      dt>12
-        ? top.arrivalScore+20
-        : top.arrivalScore*0.5
-    );
-
-  const gnss =
-    riskLevel(
-      GLOBAL.sw.kp*12
-    );
-
-  const drag =
-    riskLevel(
-      GLOBAL.sw.kp*8
-    );
-
-  document.getElementById("hazardPanel").innerHTML =
-
-  `
-  <div class="phase">
-
-  <div class="phaseTitle">
-  ${phase}
-  </div>
-
-  <div style="margin-top:6px">
-  ${desc}
-  </div>
-
-  <div style="margin-top:10px">
-  Arrival:
-  <b>
-  ${top.arrival.utc.slice(0,16).replace("T"," ")}
-  UTC
-  </b>
-  </div>
-
-  <div style="margin-top:10px">
-  Current dominant hazard:
-  <b style="color:${riskColor(top.arrivalScore)}">
-  ${hazardName(dt)}
-  </b>
-  </div>
-
-  </div>
-
-  ${hazardCard(
-    "SEU Risk",
-    seu,
-    "High-energy particles may induce memory upset or electronics errors."
-  )}
-
-  ${hazardCard(
-    "Surface Charging",
-    surface,
-    "Enhanced plasma environment may increase electrostatic discharge risk."
-  )}
-
-  ${hazardCard(
-    "Deep Charging",
-    deep,
-    "Relativistic electrons may penetrate dielectric materials."
-  )}
-
-  ${hazardCard(
-    "GNSS Error",
-    gnss,
-    "Ionospheric disturbance may degrade positioning accuracy."
-  )}
-
-  ${hazardCard(
-    "LEO Drag",
-    drag,
-    "Thermospheric expansion may increase orbital drag."
-  )}
+  document.getElementById("hazardPanel").innerHTML = `
+    <div class="phase"><b>${phase}</b><br>
+    Top event: ${shortId(top.id)}<br>
+    Arrival: ${top.arrival.utc.slice(0,16).replace("T"," ")} UTC / ${top.arrival.source}</div>
+    ${hazardCard("SEU Risk",seu,"High-energy particles may induce memory upset.")}
+    ${hazardCard("Surface Charging",surface,"Enhanced plasma may increase discharge risk.")}
+    ${hazardCard("Deep Charging",deep,"Relativistic electrons may affect dielectric materials.")}
+    ${hazardCard("GNSS Error",gnss,"Ionospheric disturbance may degrade positioning.")}
+    ${hazardCard("LEO Drag",drag,"Thermospheric expansion may increase drag.")}
   `;
 }
 
-function hazardCard(title,value,desc){
-
-  const col =
-    riskColor(value);
-
-  const level =
-    riskLabel(value);
-
-  return `
-  <div class="phase">
-
-  <div class="phaseTitle">
-  ${title}
-  :
-  <span
-  class="level"
-  style="color:${col}">
-  ${level}
-  </span>
-  </div>
-
-  <div class="bar">
-  <div
-  class="fill"
-  style="
-  width:${Math.min(100,value)}%;
-  background:${col};
-  ">
-  </div>
-  </div>
-
-  <div class="small" style="margin-top:6px">
-  ${desc}
-  </div>
-
-  </div>
-  `;
+function hazardCard(title,val,desc){
+  val=Math.max(0,Math.min(100,Math.round(val)));
+  const col=riskColor(val);
+  return `<div class="phase"><b>${title}: <span style="color:${col}">${label(val)}</span></b>
+  <div class="bar"><div class="fill" style="width:${val}%;background:${col}"></div></div>
+  <div class="small">${desc}</div></div>`;
 }
 
-function hazardName(dt){
-
-  if(dt<0) return "Shock Arrival";
-  if(dt<3) return "Magnetosphere Compression";
-  if(dt<12) return "Surface Charging";
-  return "Deep Charging";
-}
-
-function riskLabel(v){
-
-  if(v>=85) return "EXTREME";
-  if(v>=70) return "HIGH";
-  if(v>=45) return "MODERATE";
-  if(v>=20) return "LOW";
-  return "MINIMAL";
-}
-
-function riskLevel(v){
-
-  return Math.max(
-    0,
-    Math.min(100,Math.round(v))
-  );
-}
-
-function renderWind(sw,p){
-
-  document.getElementById("windBox").innerHTML =
-    `
-    Time:
-    <b>${sw.time}</b><br>
-
-    Solar Wind Speed:
-    <b>${sw.speed}</b> km/s<br>
-
-    Density:
-    <b>${sw.density}</b> p/cm³<br>
-
-    IMF:
-    Bt=${sw.bt} nT /
-    Bz=${sw.bz} nT<br>
-
-    Clock Angle:
-    <b>${sw.clockAngle.toFixed(1)}°</b><br>
-
-    Dynamic Pressure:
-    <b>${sw.dynamicPressure.toFixed(2)}</b> nPa<br>
-
-    Kp:
-    <b>${sw.kp}</b><br>
-
-    GOES Proton ≥10 MeV:
-    <b>${p.p10}</b> pfu
-    `;
+function renderStatus(){
+  document.getElementById("statusBox").innerHTML =
+    Object.entries(GLOBAL.status).map(([k,v])=>`<b>${k}</b>: ${v}`).join("<br>") +
+    `<hr>Solar wind: V=${GLOBAL.sw.speed} km/s, Bz=${GLOBAL.sw.bz}, Kp=${GLOBAL.sw.kp}<br>`+
+    `GOES proton ≥10MeV: ${GLOBAL.proton.p10} pfu`;
 }
 
 function renderTable(cmes){
-
-  document.getElementById("table").innerHTML =
-  `
-  <table>
-
-  <tr>
-  <th>ID</th>
-  <th>Lon</th>
-  <th>Lat</th>
-  <th>Speed</th>
-  <th>Half</th>
-  <th>Risk</th>
-  <th>Arrival</th>
-  <th>Source</th>
-  </tr>
-
-  ${
-    cmes.map(c=>`
-    <tr>
-
-    <td>${c.id}</td>
-    <td>${c.lon}</td>
-    <td>${c.lat}</td>
-    <td>${c.speed}</td>
-    <td>${c.halfAngle}</td>
-
-    <td
-    style="
-    color:${riskColor(c.arrivalScore)};
-    font-weight:700
-    ">
-    ${c.arrivalScore}
-    </td>
-
-    <td>
-    ${c.arrival.utc.slice(0,16).replace("T"," ")}
-    </td>
-
-    <td>${c.arrival.source}</td>
-
-    </tr>
-    `).join("")
+  if(!cmes.length){
+    document.getElementById("table").innerHTML = "CMEデータなし。NASA APIキー制限またはDONKIに該当CMEがありません。";
+    return;
   }
-
-  </table>
-  `;
+  document.getElementById("table").innerHTML = `<table>
+  <tr><th>ID</th><th>Lon</th><th>Lat</th><th>Speed</th><th>Half</th><th>Risk</th><th>Arrival</th><th>Source</th></tr>
+  ${cmes.map(c=>`<tr><td>${c.id}</td><td>${c.lon}</td><td>${c.lat}</td><td>${c.speed}</td><td>${c.halfAngle}</td>
+  <td style="color:${riskColor(c.arrivalScore)};font-weight:700">${c.arrivalScore}</td>
+  <td>${c.arrival.utc.slice(0,16).replace("T"," ")}</td><td>${c.arrival.source}</td></tr>`).join("")}
+  </table>`;
 }
 
 function setup(id){
-
-  const c =
-    document.getElementById(id);
-
-  const dpr =
-    window.devicePixelRatio || 1;
-
-  const rect =
-    c.getBoundingClientRect();
-
-  c.width = rect.width*dpr;
-  c.height = rect.height*dpr;
-
-  const ctx =
-    c.getContext("2d");
-
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-
-  return {
-    ctx,
-    w:rect.width,
-    h:rect.height,
-    cx:rect.width/2,
-    cy:rect.height/2,
-    r:Math.min(rect.width,rect.height)*0.38
-  };
+  const c=document.getElementById(id),dpr=devicePixelRatio||1,rect=c.getBoundingClientRect();
+  c.width=rect.width*dpr;c.height=rect.height*dpr;
+  const ctx=c.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,w:rect.width,h:rect.height,cx:rect.width/2,cy:rect.height/2,r:Math.min(rect.width,rect.height)*.38};
 }
 
 function setupWide(id){
-
-  const c =
-    document.getElementById(id);
-
-  const dpr =
-    window.devicePixelRatio || 1;
-
-  const rect =
-    c.getBoundingClientRect();
-
-  c.width = rect.width*dpr;
-  c.height = rect.height*dpr;
-
-  const ctx =
-    c.getContext("2d");
-
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-
-  return {
-    ctx,
-    w:rect.width,
-    h:rect.height
-  };
-}
-
-function drawGrid(ctx,cx,cy,r){
-
-  ctx.strokeStyle="rgba(255,255,255,0.15)";
-  ctx.lineWidth=1;
-
-  [-60,-30,0,30,60].forEach(lat=>{
-
-    ctx.beginPath();
-
-    for(let lon=-90; lon<=90; lon+=2){
-
-      const p =
-        ortho(lat,lon);
-
-      const x =
-        cx + p.x*r;
-
-      const y =
-        cy + p.y*r;
-
-      if(lon===-90){
-        ctx.moveTo(x,y);
-      }else{
-        ctx.lineTo(x,y);
-      }
-    }
-
-    ctx.stroke();
-  });
+  const c=document.getElementById(id),dpr=devicePixelRatio||1,rect=c.getBoundingClientRect();
+  c.width=rect.width*dpr;c.height=rect.height*dpr;
+  const ctx=c.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,w:rect.width,h:rect.height};
 }
 
 function ortho(latDeg,lonDeg){
-
-  const lat =
-    latDeg*Math.PI/180;
-
-  const lon =
-    lonDeg*Math.PI/180;
-
-  const x =
-    Math.cos(lat)*Math.sin(lon);
-
-  const y =
-    -Math.sin(lat);
-
-  const z =
-    Math.cos(lat)*Math.cos(lon);
-
-  return {
-    x,
-    y,
-    z,
-    visible:z>0
-  };
+  const lat=latDeg*Math.PI/180,lon=lonDeg*Math.PI/180;
+  return {x:Math.cos(lat)*Math.sin(lon),y:-Math.sin(lat),z:Math.cos(lat)*Math.cos(lon),visible:Math.cos(lat)*Math.cos(lon)>0};
 }
 
-function rotateLon(lon,t0,time){
-
-  const h =
-    (time-t0)/3600000;
-
-  return normalizeLon(
-    lon + SOLAR_ROTATION*h
-  );
-}
-
-function normalizeLon(lon){
-
-  while(lon>180) lon-=360;
-  while(lon<-180) lon+=360;
-
-  return lon;
-}
-
-function riskColor(v){
-
-  if(v>=85) return "#d500f9";
-  if(v>=70) return "#ff1744";
-  if(v>=45) return "#ff9800";
-  if(v>=20) return "#ffee58";
-  return "#8bc34a";
-}
-
-function shortId(id){
-
-  const s =
-    String(id || "CME");
-
-  if(s.includes("CME")){
-
-    return "CME" +
-      s
-      .split("CME")
-      .pop()
-      .replace(/[^0-9]/g,"")
-      .slice(-4);
-  }
-
-  return s.slice(-6);
-}
+function normalizeLon(lon){while(lon>180)lon-=360;while(lon<-180)lon+=360;return lon;}
+function riskColor(v){if(v>=85)return"#d500f9";if(v>=70)return"#ff1744";if(v>=45)return"#ff9800";if(v>=20)return"#ffee58";return"#8bc34a";}
+function label(v){if(v>=85)return"EXTREME";if(v>=70)return"HIGH";if(v>=45)return"MODERATE";if(v>=20)return"LOW";return"MINIMAL";}
+function shortId(id){const s=String(id||"CME");return s.includes("CME") ? "CME"+s.split("CME").pop().replace(/[^0-9]/g,"").slice(-4) : s.slice(-6);}
 
 function playTimeline(){
-
   stopTimeline();
-
-  GLOBAL.timer =
-    setInterval(()=>{
-
-      const s =
-        document.getElementById("timeSlider");
-
-      let v =
-        Number(s.value)+1;
-
-      if(v>168) v=0;
-
-      s.value=v;
-
-      updateTimeline();
-
-    },300);
+  GLOBAL.timer=setInterval(()=>{
+    const s=document.getElementById("timeSlider");
+    let v=Number(s.value)+1;if(v>168)v=0;s.value=v;updateTimeline();
+  },300);
 }
-
-function stopTimeline(){
-
-  if(GLOBAL.timer){
-    clearInterval(GLOBAL.timer);
-  }
-
-  GLOBAL.timer=null;
-}
+function stopTimeline(){if(GLOBAL.timer)clearInterval(GLOBAL.timer);GLOBAL.timer=null;}
 
 loadAll();
-
 </script>
-
 </body>
 </html>
