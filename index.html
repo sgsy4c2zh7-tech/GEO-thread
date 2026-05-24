@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DONKI CME GEO Risk System</title>
+<title>DONKI CME GEO Impact System</title>
 
 <style>
 body{
@@ -21,12 +21,10 @@ header{
 
 button{
   padding:10px 14px;
+  margin:4px;
   border:0;
   border-radius:8px;
-  background:#1e88e5;
-  color:#fff;
   cursor:pointer;
-  margin-right:8px;
   font-weight:700;
 }
 
@@ -41,7 +39,7 @@ main{
 }
 
 .card{
-  background:#141b28;
+  background:#141b27;
   border:1px solid #333;
   border-radius:14px;
   padding:14px;
@@ -59,7 +57,7 @@ main{
 .widebox{
   position:relative;
   width:100%;
-  height:260px;
+  height:280px;
   background:#000;
   border-radius:12px;
   overflow:hidden;
@@ -76,15 +74,6 @@ input[type=range]{
   width:100%;
 }
 
-pre{
-  background:#050608;
-  border-radius:10px;
-  padding:10px;
-  overflow:auto;
-  max-height:300px;
-  white-space:pre-wrap;
-}
-
 table{
   width:100%;
   border-collapse:collapse;
@@ -97,11 +86,25 @@ td,th{
   text-align:left;
 }
 
+pre{
+  background:#050608;
+  border-radius:10px;
+  padding:10px;
+  white-space:pre-wrap;
+  max-height:320px;
+  overflow:auto;
+}
+
 .small{
-  color:#bbb;
   font-size:13px;
+  color:#bbb;
   line-height:1.5;
 }
+
+.ok{color:#8bc34a}
+.warn{color:#ffd54f}
+.mid{color:#ff9800}
+.bad{color:#ff5252}
 </style>
 </head>
 
@@ -110,10 +113,7 @@ td,th{
 <header>
 <h2>DONKI CME → GEO Longitude Risk System</h2>
 
-<button onclick="loadAll()">
-DONKI + NOAA取得
-</button>
-
+<button onclick="loadAll()">DONKI + NOAA取得</button>
 <button onclick="playTimeline()">▶ 再生</button>
 <button onclick="stopTimeline()">停止</button>
 </header>
@@ -124,32 +124,24 @@ DONKI + NOAA取得
 
 <section class="card">
 <h3>① DONKI CME 現況</h3>
-
 <div class="box">
 <canvas id="sunCanvas"></canvas>
 </div>
-
-<div id="sunInfo" class="small">
-未取得
-</div>
+<div id="sunSummary" class="small"></div>
 </section>
 
 <section class="card">
-<h3>② GEO経度別リスク</h3>
-
+<h3>② GEO経度別リスク予測</h3>
 <div class="box">
 <canvas id="geoCanvas"></canvas>
 </div>
-
-<div id="geoInfo" class="small">
-未取得
-</div>
+<div id="geoSummary" class="small"></div>
 </section>
 
 </div>
 
 <section class="card" style="margin-top:16px">
-<h3>③ 太陽→地球 CME伝播</h3>
+<h3>③ 太陽→地球 伝播タイムライン</h3>
 
 <input
 id="timeSlider"
@@ -165,42 +157,30 @@ oninput="updateTimeline()">
 <div class="widebox">
 <canvas id="flowCanvas"></canvas>
 </div>
-
 </section>
 
 <section class="card" style="margin-top:16px">
-<h3>④ NOAA RTSW 現況</h3>
-
-<div id="swInfo" class="small">
-未取得
-</div>
+<h3>NOAA 太陽風・IMF</h3>
+<div id="swBox" class="small"></div>
 </section>
 
 <section class="card" style="margin-top:16px">
-<h3>⑤ CME一覧</h3>
+<h3>DONKI CME一覧</h3>
 <div id="table"></div>
 </section>
 
 <section class="card" style="margin-top:16px">
-<h3>Status</h3>
-<pre id="raw">未取得</pre>
+<h3>Status / Raw</h3>
+<pre id="raw"></pre>
 </section>
 
 </main>
 
 <script>
-
 const NASA_KEY = "DEMO_KEY";
 
 const DONKI =
-`https://api.nasa.gov/DONKI/CMEAnalysis
-?startDate=${dateDaysAgo(5)}
-&endDate=${dateToday()}
-&mostAccurateOnly=true
-&speed=500
-&halfAngle=20
-&catalog=ALL
-&api_key=${NASA_KEY}`.replace(/\s+/g,'');
+"https://api.nasa.gov/DONKI/CMEAnalysis";
 
 const NOAA = {
   wind:"https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json",
@@ -209,415 +189,580 @@ const NOAA = {
 };
 
 let GLOBAL = {
-  cmes:[],
-  sw:{},
-  startTime:new Date(),
-  timer:null
+  cmes: [],
+  sw: {},
+  startTime: new Date(),
+  timer: null
 };
 
-function dateToday(){
-  return new Date().toISOString().slice(0,10);
-}
-
-function dateDaysAgo(d){
-  const t=new Date(Date.now()-d*86400000);
-  return t.toISOString().slice(0,10);
+function raw(x){
+  document.getElementById("raw").textContent = x;
 }
 
 async function loadAll(){
+  raw("取得中...");
 
   try{
+    const now = new Date();
 
-    raw("DONKI取得中...");
+    const start = new Date(now.getTime() - 7*86400000)
+      .toISOString()
+      .slice(0,10);
+
+    const end = now.toISOString().slice(0,10);
+
+    const donkiURL =
+      `${DONKI}?startDate=${start}&endDate=${end}&mostAccurateOnly=true&speed=300&api_key=${NASA_KEY}`;
 
     const [donki, wind, mag, kp] = await Promise.all([
-      fetchJson(DONKI),
-      fetchJson(NOAA.wind).catch(()=>[]),
-      fetchJson(NOAA.mag).catch(()=>[]),
-      fetchJson(NOAA.kp).catch(()=>[])
+      fetchJSON(donkiURL),
+      fetchJSON(NOAA.wind),
+      fetchJSON(NOAA.mag),
+      fetchJSON(NOAA.kp)
     ]);
 
-    const sw = parseSolarWind(wind,mag,kp);
+    const sw = parseSolarWind(wind, mag, kp);
 
-    GLOBAL.sw = sw;
-
-    GLOBAL.cmes =
-      donki
-      .map(c => normalizeDONKI(c,sw))
+    const cmes = donki
+      .map(c => parseDONKI(c, sw))
+      .filter(Boolean)
       .sort((a,b)=>b.impactScore-a.impactScore);
 
-    drawSun(GLOBAL.cmes);
+    GLOBAL.cmes = cmes;
+    GLOBAL.sw = sw;
+    GLOBAL.startTime = new Date();
 
+    drawSun(cmes);
     renderSolarWind(sw);
-
-    renderTable(GLOBAL.cmes);
-
+    renderTable(cmes);
     updateTimeline();
 
     raw(JSON.stringify({
-      cmeCount:GLOBAL.cmes.length,
-      solarWind:sw,
-      topCmes:GLOBAL.cmes.slice(0,10)
-    },null,2));
+      note:"DONKI CMEAnalysis + orthographic projection. Visible disk only on solar face.",
+      donkiCount: donki.length,
+      cmeCount: cmes.length,
+      visibleDiskCount: cmes.filter(c => c.visible).length,
+      limbOrBacksideCount: cmes.filter(c => !c.visible).length,
+      cmes:cmes.slice(0,20),
+      solarWind:sw
+    }, null, 2));
 
   }catch(e){
+    raw("ERROR: " + e.message);
+  }
+}
 
-    raw("ERROR: "+e.message);
+async function fetchJSON(url){
+  const sep = url.includes("?") ? "&" : "?";
+  const r = await fetch(url + sep + "t=" + Date.now());
 
+  if(!r.ok){
+    throw new Error("HTTP " + r.status + " : " + url);
   }
 
-}
-
-async function fetchJson(url){
-
-  const r = await fetch(url+"&t="+Date.now());
-
-  if(!r.ok)
-    throw new Error("HTTP "+r.status);
-
   return await r.json();
-
 }
 
-function parseSolarWind(wind,mag,kp){
-
-  const w = wind.at(-1) || {};
-  const b = mag.at(-1) || {};
-  const k = kp.at(-1) || {};
+function parseSolarWind(wind, mag, kp){
+  const w = latest(wind);
+  const b = latest(mag);
+  const k = latest(kp);
 
   const speed =
-    Number(w.proton_speed || w.speed || 400);
+    pick(w,["speed","proton_speed","bulk_speed"]);
 
   const density =
-    Number(w.proton_density || w.density || 5);
+    pick(w,["density","proton_density"]);
 
   const by =
-    Number(b.by_gsm || b.by || 0);
+    pick(b,["by_gsm","by"]);
 
   const bz =
-    Number(b.bz_gsm || b.bz || 0);
+    pick(b,["bz_gsm","bz"]);
 
   const bt =
-    Number(b.bt || 5);
+    pick(b,["bt","total_field"]);
 
   const kpVal =
-    Number(k.kp_index || k.kp || 2);
+    pick(k,["kp_index","kp","estimated_kp"]);
 
   const pdyn =
-    1.6726e-6 * density * speed * speed;
+    density && speed
+    ? 1.6726e-6 * density * speed * speed
+    : 0;
 
   const clock =
     calcClockAngle(by,bz);
 
-  const coupling =
-    calcCoupling(speed,bt,by,bz);
-
   return {
-    speed,density,by,bz,bt,
+    time:
+      w.time_tag ||
+      w.time ||
+      b.time_tag ||
+      b.time ||
+      k.time_tag ||
+      k.time ||
+      "",
+    speed,
+    density,
+    by,
+    bz,
+    bt,
     kp:kpVal,
     dynamicPressure:pdyn,
     clockAngle:clock,
-    coupling
+    clockFactor:clockFactor(clock,bz),
+    coupling:coupling(speed,bt,clock)
   };
 }
 
-function calcClockAngle(by,bz){
+function latest(arr){
+  if(!Array.isArray(arr)) return {};
 
+  for(let i=arr.length-1;i>=0;i--){
+    const r = arr[i];
+
+    if(r && typeof r === "object"){
+      return r;
+    }
+  }
+
+  return {};
+}
+
+function pick(obj, names){
+  for(const n of names){
+    if(obj[n] !== undefined){
+      const v = Number(obj[n]);
+
+      if(Number.isFinite(v)){
+        return v;
+      }
+    }
+  }
+
+  return 0;
+}
+
+function calcClockAngle(by,bz){
   return Math.max(
     0,
     Math.min(
       180,
-      Math.atan2(Math.abs(by),bz)*180/Math.PI
+      Math.atan2(Math.abs(by), bz)*180/Math.PI
     )
   );
-
 }
 
-function calcCoupling(speed,bt,by,bz){
+function clockFactor(a,bz){
+  if(bz>=0 && a<90) return 0;
+  if(a>=150) return 1;
+  if(a>=135) return 0.8;
+  if(a>=120) return 0.55;
+  if(a>=90) return 0.3;
+  return 0.05;
+}
 
-  const theta =
-    calcClockAngle(by,bz)*Math.PI/180;
+function coupling(v,bt,a){
+  const t = a*Math.PI/180;
 
   return Math.round(
-    speed *
+    v *
     Math.max(0,bt) *
-    Math.pow(Math.sin(theta/2),4)
+    Math.pow(Math.sin(t/2),4)
   );
-
 }
 
-function normalizeDONKI(c,sw){
+function parseDONKI(c, sw){
+  if(!c.speed) return null;
 
-  const lon = Number(c.longitude || 0);
-  const lat = Number(c.latitude || 0);
-  const speed = Number(c.speed || 500);
-  const halfAngle = Number(c.halfAngle || 30);
+  const lon = Number(c.longitude);
+  const lat = Number(c.latitude);
+  const speed = Number(c.speed);
+  const half = Number(c.halfAngle || 20);
 
-  const earthDirected =
-    Math.abs(lon) < 40
-    ? 1
-    : Math.abs(lon) < 70
-    ? 0.6
-    : 0.2;
+  if(!Number.isFinite(lon) || !Number.isFinite(lat) || !Number.isFinite(speed)){
+    return null;
+  }
 
-  const widthScore =
-    Math.min(30,halfAngle);
+  const t0 =
+    c.time21_5
+    ? new Date(c.time21_5)
+    : new Date(c.activityStartTime || Date.now());
 
-  const speedScore =
-    speed>=2000 ? 40 :
-    speed>=1500 ? 32 :
-    speed>=1000 ? 24 :
-    speed>=700 ? 16 :
-    8;
+  const earthness =
+    earthDirectedness(lon, half);
 
-  const earthScore =
-    earthDirected * 35;
-
-  const clockScore =
-    sw.clockAngle>=150 ? 20 :
-    sw.clockAngle>=135 ? 14 :
-    sw.clockAngle>=120 ? 8 :
-    0;
-
-  const pressureScore =
-    sw.dynamicPressure>=8 ? 14 :
-    sw.dynamicPressure>=4 ? 8 :
-    0;
-
-  const kpScore =
-    sw.kp>=6 ? 15 :
-    sw.kp>=5 ? 8 :
-    0;
-
-  const couplingScore =
-    sw.coupling>=8000 ? 14 :
-    sw.coupling>=4000 ? 8 :
-    0;
-
-  const impactScore = Math.min(
-    100,
-    Math.round(
-      widthScore+
-      speedScore+
-      earthScore+
-      clockScore+
-      pressureScore+
-      kpScore+
-      couplingScore
-    )
-  );
+  const impact =
+    computeImpact(speed, half, earthness, sw);
 
   const arrival =
-    estimateArrival(c,sw);
+    computeArrival(c, sw);
+
+  const projection =
+    projectSolarOrthographic(lat, lon);
+
+  const duration =
+    durationByHalfAngle(half);
 
   return {
-    ...c,
+    id:c.activityID || ("CME-"+Math.random().toString(36).slice(2,7)),
+    catalog:c.catalog || "",
+    note:c.note || "",
     lon,
     lat,
     speed,
-    halfAngle,
-    impactScore,
+    halfAngle:half,
+    t0,
+    visible:projection.visible,
+    limbFactor:projection.z,
+    impactScore:impact,
     arrival,
-    activeStart:
-      new Date(arrival.date.getTime()-6*3600*1000),
-    activeEnd:
-      new Date(arrival.date.getTime()+36*3600*1000)
+    durationHours:duration,
+    activeStart:new Date(arrival.date.getTime() - 6*3600*1000),
+    activeEnd:new Date(arrival.date.getTime() + duration*3600*1000)
   };
-
 }
 
-function estimateArrival(c,sw){
+function earthDirectedness(lon, half){
+  const d = Math.abs(lon);
 
-  if(
+  if(d < half) return 35;
+  if(d < half+20) return 25;
+  if(d < half+40) return 12;
+
+  return 3;
+}
+
+function computeImpact(speed, half, earthness, sw){
+  const speedScore =
+    speed>=2000 ? 40 :
+    speed>=1500 ? 32 :
+    speed>=1000 ? 22 :
+    speed>=700 ? 14 : 5;
+
+  const widthScore =
+    Math.min(30, half*0.7);
+
+  const shock =
+    sw.dynamicPressure>=8 ? 15 :
+    sw.dynamicPressure>=4 ? 8 : 0;
+
+  const clock =
+    sw.clockAngle>=150 ? 25 :
+    sw.clockAngle>=135 ? 18 :
+    sw.clockAngle>=120 ? 12 :
+    sw.clockAngle>=90 ? 6 : 0;
+
+  const kp =
+    sw.kp>=7 ? 18 :
+    sw.kp>=5 ? 10 : 0;
+
+  return Math.min(
+    100,
+    Math.round(
+      speedScore +
+      widthScore +
+      earthness +
+      shock +
+      clock +
+      kp
+    )
+  );
+}
+
+function computeArrival(c, sw){
+  const enlil =
     c.enlilList &&
     c.enlilList.length &&
     c.enlilList[0].estimatedShockArrivalTime
-  ){
+    ? c.enlilList[0]
+    : null;
 
-    const d =
-      new Date(
-        c.enlilList[0].estimatedShockArrivalTime
-      );
+  if(enlil){
+    const d = new Date(enlil.estimatedShockArrivalTime);
 
     return {
       source:"ENLIL",
       date:d,
-      utc:d.toISOString()
+      utc:d.toISOString(),
+      kp18: enlil.estimatedDuration || null
     };
-
   }
-
-  const speed = Number(c.speed || 500);
 
   const bg =
     sw.speed>250 ? sw.speed : 400;
 
-  let vEff = speed;
+  let v = Number(c.speed);
 
-  if(speed>bg)
-    vEff = bg + (speed-bg)*0.62;
+  if(v > bg){
+    v = bg + (v-bg)*0.62;
+  }
+
+  if(v < 320){
+    v = 320;
+  }
+
+  const baseTime =
+    c.time21_5
+    ? new Date(c.time21_5)
+    : new Date(c.activityStartTime || Date.now());
 
   const hours =
-    149597870 / vEff / 3600;
-
-  const t0 =
-    new Date(c.time21_5);
+    149597870 / v / 3600;
 
   const d =
     new Date(
-      t0.getTime() + hours*3600*1000
+      baseTime.getTime()
+      + hours*3600*1000
     );
 
   return {
-    source:"DBM",
+    source:"DBM-lite",
     date:d,
     utc:d.toISOString()
   };
+}
 
+function durationByHalfAngle(half){
+  if(half >= 90) return 48;
+  if(half >= 60) return 36;
+  if(half >= 35) return 24;
+  return 12;
+}
+
+// 正射投影。lon=0, lat=0 が太陽面中央。
+// z > 0 のものだけ地球から見える半球。
+function projectSolarOrthographic(latDeg, lonDeg){
+  const lat = latDeg * Math.PI/180;
+  const lon = lonDeg * Math.PI/180;
+
+  const x = Math.cos(lat) * Math.sin(lon);
+  const y = -Math.sin(lat);
+  const z = Math.cos(lat) * Math.cos(lon);
+
+  return {
+    x,
+    y,
+    z,
+    visible:z > 0
+  };
 }
 
 function drawSun(cmes){
-
-  const {ctx,w,h,cx,cy,r} =
-    setup("sunCanvas");
+  const {ctx,w,h,cx,cy,r} = setup("sunCanvas");
 
   ctx.clearRect(0,0,w,h);
 
+  const g = ctx.createRadialGradient(cx-r*0.25,cy-r*0.25,r*0.1,cx,cy,r);
+  g.addColorStop(0,"#fff59d");
+  g.addColorStop(0.55,"#ffb300");
+  g.addColorStop(1,"#e65100");
+
   ctx.beginPath();
   ctx.arc(cx,cy,r,0,Math.PI*2);
-  ctx.fillStyle="#ffb300";
+  ctx.fillStyle = g;
   ctx.fill();
 
   ctx.strokeStyle="#fff5";
+  ctx.lineWidth=2;
   ctx.stroke();
+
+  drawSolarGrid(ctx,cx,cy,r);
 
   ctx.fillStyle="#fff";
   ctx.font="13px system-ui";
-  ctx.fillText(
-    "DONKI CMEAnalysis",
-    12,22
-  );
+  ctx.fillText("DONKI CMEAnalysis / orthographic",12,24);
+  ctx.fillText("N",cx-4,cy-r-10);
+  ctx.fillText("S",cx-4,cy+r+20);
+  ctx.fillText("E",cx-r-24,cy+4);
+  ctx.fillText("W",cx+r+12,cy+4);
 
-  cmes.slice(0,15).forEach(c=>{
+  const visible = cmes.filter(c => c.visible);
+  const backside = cmes.filter(c => !c.visible);
 
-    const x =
-      cx + (c.lon/90)*r;
+  visible.slice(0,30).forEach(c=>{
+    const p = projectSolarOrthographic(c.lat,c.lon);
 
-    const y =
-      cy - (c.lat/90)*r;
+    const x = cx + p.x*r;
+    const y = cy + p.y*r;
 
-    const col =
-      riskColor(c.impactScore);
-
-    ctx.fillStyle=col;
+    const col = riskColor(c.impactScore);
+    const size = Math.max(5, Math.min(30, c.halfAngle/3));
 
     ctx.beginPath();
-
-    ctx.arc(
-      x,
-      y,
-      Math.max(4,c.halfAngle*0.35),
-      0,
-      Math.PI*2
-    );
-
+    ctx.arc(x,y,size+5,0,Math.PI*2);
+    ctx.fillStyle=col+"55";
     ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(x,y,size,0,Math.PI*2);
+    ctx.fillStyle=col;
+    ctx.fill();
+
+    ctx.strokeStyle="#000";
+    ctx.lineWidth=1;
+    ctx.stroke();
+
+    // CMEの広がりを円で表す
+    ctx.beginPath();
+    ctx.arc(x,y,Math.min(r*0.35,size+c.halfAngle*0.8),0,Math.PI*2);
+    ctx.strokeStyle=col+"99";
+    ctx.lineWidth=2;
+    ctx.stroke();
 
     ctx.fillStyle="#fff";
     ctx.font="11px system-ui";
-
-    ctx.fillText(
-      "CME",
-      x+8,
-      y
-    );
-
+    ctx.fillText(shortId(c.id),x+size+6,y);
   });
 
-  document.getElementById("sunInfo").innerHTML =
-    `DONKI CME数: <b>${cmes.length}</b><br>`+
-    `円サイズ=halfAngle<br>`+
-    `色=Impact Score<br>`+
-    `位置=longitude/latitude`;
+  // 裏面・limb側は右端にリスト表示
+  if(backside.length){
+    ctx.fillStyle="#bbb";
+    ctx.font="12px system-ui";
+    ctx.fillText("Backside / beyond limb:",cx+r+20,cy-r+22);
 
+    backside.slice(0,12).forEach((c,i)=>{
+      const y = cy-r + i*18;
+      const col = riskColor(c.impactScore);
+
+      ctx.fillStyle=col;
+      ctx.beginPath();
+      ctx.arc(cx+r+30,y,5,0,Math.PI*2);
+      ctx.fill();
+
+      ctx.fillStyle="#fff";
+      ctx.fillText(`${shortId(c.id)} lon ${c.lon}`,cx+r+40,y+4);
+    });
+  }
+
+  document.getElementById("sunSummary").innerHTML =
+    `DONKI CMEAnalysis<br>`+
+    `太陽面表示: <b>${visible.length}</b>件 / 裏面・limb外: <b>${backside.length}</b>件<br>`+
+    `描画: 正射投影。z = cos(lat)cos(lon) &gt; 0 のCMEだけ太陽面に表示。<br>`+
+    `点サイズ = halfAngle、色 = GEO impact score`;
+}
+
+function drawSolarGrid(ctx,cx,cy,r){
+  ctx.strokeStyle="rgba(255,255,255,0.16)";
+  ctx.lineWidth=1;
+
+  [-60,-30,0,30,60].forEach(lat=>{
+    ctx.beginPath();
+
+    for(let lon=-90; lon<=90; lon+=2){
+      const p = projectSolarOrthographic(lat,lon);
+      const x = cx + p.x*r;
+      const y = cy + p.y*r;
+
+      if(lon === -90) ctx.moveTo(x,y);
+      else ctx.lineTo(x,y);
+    }
+
+    ctx.stroke();
+  });
+
+  [-60,-30,0,30,60].forEach(lon=>{
+    ctx.beginPath();
+
+    for(let lat=-89; lat<=89; lat+=2){
+      const p = projectSolarOrthographic(lat,lon);
+      const x = cx + p.x*r;
+      const y = cy + p.y*r;
+
+      if(lat === -89) ctx.moveTo(x,y);
+      else ctx.lineTo(x,y);
+    }
+
+    ctx.stroke();
+  });
 }
 
 function updateTimeline(){
-
   const h =
     Number(
       document.getElementById("timeSlider").value
     );
 
-  const time =
+  const t =
     new Date(
-      GLOBAL.startTime.getTime()+h*3600*1000
+      GLOBAL.startTime.getTime()
+      + h*3600*1000
     );
 
   document.getElementById("timeLabel").innerHTML =
-    `<b>${time.toISOString().slice(0,16).replace("T"," ")}</b> UTC`;
+    `<b>${t.toISOString().slice(0,16).replace("T"," ")} UTC</b> / 現在+${h}h`;
 
-  drawGEO(time);
-
-  drawFlow(time);
-
+  drawGeo(GLOBAL.cmes, GLOBAL.sw, t);
+  drawFlow(GLOBAL.cmes, t);
 }
 
-function drawGEO(time){
-
+function drawGeo(cmes, sw, time){
   const {ctx,w,h} =
     setup("geoCanvas");
 
   ctx.clearRect(0,0,w,h);
 
   const active =
-    GLOBAL.cmes.filter(
-      c=>time>=c.activeStart && time<=c.activeEnd
+    cmes.filter(
+      c =>
+      time>=c.activeStart &&
+      time<=c.activeEnd
     );
 
   const center =
-    subsolarLongitude(time);
+    subsolarLon(time);
 
   for(let i=0;i<360;i++){
-
     const lon = -180+i;
-
     let risk = 0;
 
     for(const c of active){
-
       const dt =
-        Math.abs(time-c.arrival.date)/3600000;
+        Math.abs(
+          time-c.arrival.date
+        )/3600000;
 
-      const timeWeight =
-        Math.exp(-(dt*dt)/(2*18*18));
-
-      const compression =
+      const tw =
         Math.exp(
-          -(angDist(lon,center)**2)/(2*55*55)
+          -(dt*dt)/(2*18*18)
+        );
+
+      const d1 =
+        angDist(lon, center);
+
+      const comp =
+        Math.exp(
+          -(d1*d1)/(2*55*55)
         );
 
       const dusk =
+        normalizeLon(center-90);
+
+      const d2 =
+        angDist(lon,dusk);
+
+      const inj =
         Math.exp(
-          -(angDist(
-            lon,
-            normalizeLon(center-90)
-          )**2)/(2*70*70)
+          -(d2*d2)/(2*70*70)
         );
 
       let r =
         c.impactScore *
-        timeWeight *
-        compression;
+        tw *
+        comp;
 
-      if(GLOBAL.sw.clockAngle>=120)
+      if(sw.clockAngle>=120 || sw.kp>=5){
         r +=
           c.impactScore *
+          sw.clockFactor *
           0.45 *
-          dusk;
+          tw *
+          inj;
+      }
 
-      risk = Math.max(risk,r);
-
+      risk =
+        Math.max(risk,r);
     }
 
     ctx.fillStyle =
@@ -625,192 +770,200 @@ function drawGEO(time){
 
     ctx.fillRect(
       i*w/360,
-      h*0.22,
+      h*0.25,
       w/360+1,
-      h*0.28
+      h*0.3
     );
-
   }
 
   drawGeoAxis(ctx,w,h);
 
-  document.getElementById("geoInfo").innerHTML =
-    `影響中CME: <b>${active.length}</b><br>`+
-    `Clock angle: <b>${GLOBAL.sw.clockAngle.toFixed(1)}°</b><br>`+
-    `Bz: <b>${GLOBAL.sw.bz}</b> nT`;
+  ctx.fillStyle="#fff";
+  ctx.font="13px system-ui";
 
+  ctx.fillText(
+    `Time: ${time.toISOString().slice(0,16).replace("T"," ")} UTC`,
+    12,
+    22
+  );
+
+  ctx.fillText(
+    `Clock=${sw.clockAngle.toFixed(0)}°  Bz=${sw.bz}  Kp=${sw.kp}`,
+    12,
+    h*0.72
+  );
+
+  document.getElementById("geoSummary").innerHTML =
+    `影響中CME: <b>${active.length}</b><br>`+
+    `Subsolar GEO: <b>${center.toFixed(1)}°</b><br>`+
+    `昼側圧縮 + Clock angle高時の夕方側注入を表示`;
 }
 
-function drawFlow(time){
-
-  const c =
-    document.getElementById("flowCanvas");
-
-  const dpr =
-    window.devicePixelRatio||1;
-
-  const rect =
-    c.getBoundingClientRect();
-
-  c.width = rect.width*dpr;
-  c.height = rect.height*dpr;
-
-  const ctx =
-    c.getContext("2d");
-
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-
-  const w = rect.width;
-  const h = rect.height;
-
-  const sunX = 70;
-  const earthX = w-80;
-  const y = h/2;
+function drawFlow(cmes,time){
+  const {ctx,w,h} =
+    setupWide("flowCanvas");
 
   ctx.clearRect(0,0,w,h);
 
-  ctx.beginPath();
-  ctx.moveTo(sunX,y);
-  ctx.lineTo(earthX,y);
+  const sx=70;
+  const ex=w-80;
+  const y=h/2;
+  const len=ex-sx;
 
   ctx.strokeStyle="#ffffff22";
   ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(sx,y);
+  ctx.lineTo(ex,y);
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.arc(sunX,y,28,0,Math.PI*2);
+  ctx.arc(sx,y,28,0,Math.PI*2);
   ctx.fillStyle="#ffb300";
   ctx.fill();
 
   ctx.beginPath();
-  ctx.arc(earthX,y,14,0,Math.PI*2);
+  ctx.arc(ex,y,14,0,Math.PI*2);
   ctx.fillStyle="#4fc3f7";
   ctx.fill();
 
-  GLOBAL.cmes.slice(0,10).forEach(c=>{
+  ctx.fillStyle="#fff";
+  ctx.font="12px system-ui";
+  ctx.fillText("Sun",sx-12,y+48);
+  ctx.fillText("Earth / GEO",ex-34,y+38);
+  ctx.fillText("CME propagation timeline",12,24);
 
-    const t0 =
-      new Date(c.time21_5);
-
+  cmes.slice(0,12).forEach(c=>{
     const total =
-      c.arrival.date - t0;
+      c.arrival.date - c.t0;
 
     const elapsed =
-      time - t0;
+      time - c.t0;
 
     const frac =
       Math.max(
         0,
-        Math.min(1.15, elapsed/total)
+        Math.min(
+          1.15,
+          elapsed/total
+        )
       );
 
-    if(frac<=0 || frac>1.12)
+    if(frac<=0 || frac>1.1){
       return;
+    }
 
     const x =
-      sunX + frac*(earthX-sunX);
+      sx + frac*len;
 
     const col =
       riskColor(c.impactScore);
 
     ctx.strokeStyle=col;
     ctx.lineWidth=
-      Math.max(2,c.halfAngle*0.3);
+      Math.max(
+        2,
+        Math.min(18,c.halfAngle/3)
+      );
 
-    ctx.globalAlpha=0.7;
-
+    ctx.globalAlpha=0.78;
     ctx.beginPath();
 
     ctx.arc(
       x,
       y,
-      25+c.halfAngle*0.6,
+      25+c.halfAngle*0.8,
       -0.9,
       0.9
     );
 
     ctx.stroke();
-
     ctx.globalAlpha=1;
+
+    ctx.fillStyle=col;
+    ctx.beginPath();
+    ctx.arc(x,y,5,0,Math.PI*2);
+    ctx.fill();
 
     ctx.fillStyle="#fff";
     ctx.font="11px system-ui";
 
     ctx.fillText(
-      `${Math.round(frac*100)}%`,
+      shortId(c.id),
       x+8,
       y-24
     );
-
   });
-
 }
 
 function renderSolarWind(sw){
+  const clockClass =
+    sw.clockAngle >= 150 ? "bad" :
+    sw.clockAngle >= 120 ? "warn" : "ok";
 
-  document.getElementById("swInfo").innerHTML =
-    `Solar wind speed: <b>${sw.speed}</b> km/s<br>`+
-    `Density: <b>${sw.density}</b> p/cm³<br>`+
-    `By: <b>${sw.by}</b> nT<br>`+
-    `Bz: <b>${sw.bz}</b> nT<br>`+
-    `Bt: <b>${sw.bt}</b> nT<br>`+
-    `Clock angle: <b>${sw.clockAngle.toFixed(1)}°</b><br>`+
-    `Coupling: <b>${sw.coupling}</b><br>`+
-    `Dynamic Pressure: <b>${sw.dynamicPressure.toFixed(2)}</b> nPa<br>`+
+  const pdynClass =
+    sw.dynamicPressure >= 8 ? "bad" :
+    sw.dynamicPressure >= 4 ? "warn" : "ok";
+
+  document.getElementById("swBox").innerHTML =
+    `Time: <b>${sw.time || "不明"}</b><br>`+
+    `Speed: <b>${sw.speed}</b> km/s / Density: <b>${sw.density}</b> p/cm³<br>`+
+    `By=${sw.by} nT / Bz=${sw.bz} nT / Bt=${sw.bt} nT<br>`+
+    `Clock angle: <b class="${clockClass}">${sw.clockAngle.toFixed(1)}°</b><br>`+
+    `Dynamic Pressure: <b class="${pdynClass}">${sw.dynamicPressure.toFixed(2)}</b> nPa<br>`+
+    `Coupling Index: <b>${sw.coupling}</b><br>`+
     `Kp: <b>${sw.kp}</b>`;
-
 }
 
 function renderTable(cmes){
-
-  document.getElementById("table").innerHTML = `
-  <table>
+  document.getElementById("table").innerHTML =
+  `<table>
   <tr>
-  <th>Time</th>
-  <th>Lon</th>
-  <th>Lat</th>
-  <th>Speed</th>
-  <th>HalfAngle</th>
-  <th>Arrival</th>
-  <th>Method</th>
-  <th>Impact</th>
+    <th>ID</th>
+    <th>Lon</th>
+    <th>Lat</th>
+    <th>Visible</th>
+    <th>Speed</th>
+    <th>Half</th>
+    <th>Impact</th>
+    <th>Arrival</th>
+    <th>Source</th>
   </tr>
-
-  ${cmes.map(c=>`
-
-  <tr>
-  <td>${c.time21_5 || "-"}</td>
-  <td>${c.lon}</td>
-  <td>${c.lat}</td>
-  <td>${c.speed}</td>
-  <td>${c.halfAngle}</td>
-  <td>${c.arrival.utc.slice(0,16).replace("T"," ")}</td>
-  <td>${c.arrival.source}</td>
-  <td style="color:${riskColor(c.impactScore)};font-weight:700">
-  ${c.impactScore}
-  </td>
-  </tr>
-
-  `).join("")}
-
-  </table>
-  `;
-
+  ${
+    cmes.map(c=>`
+    <tr>
+      <td>${c.id}</td>
+      <td>${c.lon}</td>
+      <td>${c.lat}</td>
+      <td>${c.visible ? "front" : "back/limb"}</td>
+      <td>${c.speed}</td>
+      <td>${c.halfAngle}</td>
+      <td style="color:${riskColor(c.impactScore)};font-weight:700">
+        ${c.impactScore}
+      </td>
+      <td>${c.arrival.utc.slice(0,16).replace("T"," ")}</td>
+      <td>${c.arrival.source}</td>
+    </tr>
+    `).join("")
+  }
+  </table>`;
 }
 
 function setup(id){
-
   const c =
     document.getElementById(id);
 
   const dpr =
-    window.devicePixelRatio||1;
+    window.devicePixelRatio || 1;
 
   const rect =
     c.getBoundingClientRect();
 
-  c.width = rect.width*dpr;
-  c.height = rect.height*dpr;
+  c.width =
+    rect.width*dpr;
+
+  c.height =
+    rect.height*dpr;
 
   const ctx =
     c.getContext("2d");
@@ -825,42 +978,68 @@ function setup(id){
     cy:rect.height/2,
     r:Math.min(rect.width,rect.height)*0.38
   };
+}
 
+function setupWide(id){
+  const c =
+    document.getElementById(id);
+
+  const dpr =
+    window.devicePixelRatio || 1;
+
+  const rect =
+    c.getBoundingClientRect();
+
+  c.width =
+    rect.width*dpr;
+
+  c.height =
+    rect.height*dpr;
+
+  const ctx =
+    c.getContext("2d");
+
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  return {
+    ctx,
+    w:rect.width,
+    h:rect.height
+  };
 }
 
 function drawGeoAxis(ctx,w,h){
-
   [-180,-120,-60,0,60,120,180]
   .forEach(lon=>{
-
     const x =
       (lon+180)/360*w;
 
     ctx.strokeStyle="#fff5";
 
     ctx.beginPath();
-    ctx.moveTo(x,h*0.18);
-    ctx.lineTo(x,h*0.55);
+
+    ctx.moveTo(x,h*0.2);
+
+    ctx.lineTo(x,h*0.58);
+
     ctx.stroke();
 
     ctx.fillStyle="#fff";
+
     ctx.font="11px system-ui";
 
     ctx.fillText(
       lon+"°",
       x+2,
-      h*0.18
+      h*0.2
     );
-
   });
-
 }
 
-function subsolarLongitude(date){
-
+function subsolarLon(date){
   const h =
-    date.getUTCHours() +
-    date.getUTCMinutes()/60;
+    date.getUTCHours()
+    + date.getUTCMinutes()/60;
 
   let lon =
     180 - h*15;
@@ -869,43 +1048,40 @@ function subsolarLongitude(date){
   while(lon<-180) lon+=360;
 
   return lon;
-
-}
-
-function normalizeLon(lon){
-
-  while(lon>180) lon-=360;
-  while(lon<-180) lon+=360;
-
-  return lon;
-
 }
 
 function angDist(a,b){
-
   return Math.abs(
     ((a-b+180)%360+360)%360-180
   );
+}
 
+function normalizeLon(lon){
+  while(lon>180) lon-=360;
+  while(lon<-180) lon+=360;
+  return lon;
 }
 
 function riskColor(s){
-
-  if(s>=75) return "#ff1744";
-  if(s>=55) return "#ff9100";
-  if(s>=30) return "#ffee58";
-
+  if(s>=80) return "#ff1744";
+  if(s>=60) return "#ff9100";
+  if(s>=35) return "#ffee58";
   return "#8bc34a";
+}
 
+function shortId(id){
+  const s = String(id || "CME");
+  if(s.includes("CME")){
+    return "CME" + s.split("CME").pop().replace(/[^0-9]/g,"").slice(-4);
+  }
+  return s.slice(-6);
 }
 
 function playTimeline(){
-
   stopTimeline();
 
   GLOBAL.timer =
     setInterval(()=>{
-
       const s =
         document.getElementById("timeSlider");
 
@@ -919,26 +1095,17 @@ function playTimeline(){
       updateTimeline();
 
     },300);
-
 }
 
 function stopTimeline(){
-
-  if(GLOBAL.timer)
+  if(GLOBAL.timer){
     clearInterval(GLOBAL.timer);
+  }
 
   GLOBAL.timer=null;
-
-}
-
-function raw(t){
-
-  document.getElementById("raw").textContent=t;
-
 }
 
 loadAll();
-
 </script>
 
 </body>
